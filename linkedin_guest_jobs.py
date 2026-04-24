@@ -19,6 +19,7 @@ DEFAULT_SEARCH_URL = (
 )
 
 GUEST_SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+GUEST_DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
 
 
 @dataclass
@@ -32,6 +33,11 @@ class JobCard:
     posted: str = ""
     posted_date: str = ""
     url: str = ""
+
+
+@dataclass
+class JobDetail(JobCard):
+    description: str = ""
 
 
 def clean_text(value: str) -> str:
@@ -102,6 +108,59 @@ class SearchResultsParser(HTMLParser):
             self._field_chunks = []
 
 
+class JobDetailParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.fields: dict[str, str] = {}
+        self._field: str | None = None
+        self._chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs_list: list[tuple[str, str | None]]) -> None:
+        attrs = {name: value or "" for name, value in attrs_list}
+
+        if tag == "h2" and class_contains(attrs, "top-card-layout__title"):
+            self._start_field("title")
+        elif tag == "a" and class_contains(attrs, "topcard__org-name-link"):
+            self._start_field("company")
+        elif tag == "span" and class_contains(attrs, "posted-time-ago__text"):
+            self._start_field("posted")
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._field and tag in {"h2", "a", "span"}:
+            self._finish_field()
+
+    def handle_data(self, data: str) -> None:
+        if self._field:
+            self._chunks.append(data)
+
+    def _start_field(self, field: str) -> None:
+        if not self._field:
+            self._field = field
+            self._chunks = []
+
+    def _finish_field(self) -> None:
+        if self._field:
+            self.fields[self._field] = clean_text("".join(self._chunks))
+        self._field = None
+        self._chunks = []
+
+
+class TextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs_list: list[tuple[str, str | None]]) -> None:
+        if tag in {"br", "p", "li", "ul", "ol"}:
+            self.chunks.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        self.chunks.append(data)
+
+    def text(self) -> str:
+        return clean_text("".join(self.chunks))
+
+
 def guest_search_url(search_url: str, start: int = 0) -> str:
     query = dict(parse_qsl(urlparse(search_url).query, keep_blank_values=True))
     allowed_keys = {"keywords", "geoId", "location", "distance", "f_TPR", "f_E"}
@@ -131,10 +190,60 @@ def parse_search_results(html: str) -> list[JobCard]:
     return parser.cards
 
 
+def extract_description(html: str) -> str:
+    class_match = re.search(r'<div\b[^>]*class="[^"]*\bshow-more-less-html__markup\b[^"]*"[^>]*>', html)
+    if not class_match:
+        return ""
+
+    void_tags = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+    depth = 1
+    content_start = class_match.end()
+    for tag_match in re.finditer(r"<\s*(/)?\s*([a-zA-Z0-9:-]+)\b[^>]*?>", html[content_start:]):
+        tag_text = tag_match.group(0)
+        tag_name = tag_match.group(2).lower()
+        is_end = bool(tag_match.group(1))
+        is_self_closing = tag_text.rstrip().endswith("/>") or tag_name in void_tags
+
+        if is_end:
+            depth -= 1
+        elif not is_self_closing:
+            depth += 1
+
+        if depth == 0:
+            fragment = html[content_start : content_start + tag_match.start()]
+            parser = TextParser()
+            parser.feed(fragment)
+            return parser.text()
+    return ""
+
+
+def parse_job_detail(html: str, card: JobCard) -> JobDetail:
+    parser = JobDetailParser()
+    parser.feed(html)
+    payload = asdict(card)
+    payload.update(
+        {
+            "title": parser.fields.get("title", card.title),
+            "company": parser.fields.get("company", card.company),
+            "posted": parser.fields.get("posted", card.posted),
+            "description": extract_description(html),
+        }
+    )
+    return JobDetail(**payload)
+
+
+def fetch_job_details(cards: list[JobCard]) -> list[JobDetail]:
+    jobs: list[JobDetail] = []
+    for card in cards:
+        detail_html = fetch(GUEST_DETAIL_URL.format(job_id=card.job_id))
+        jobs.append(parse_job_detail(detail_html, card))
+    return jobs
+
+
 def main() -> int:
     search_html = fetch(guest_search_url(DEFAULT_SEARCH_URL))
-    for card in parse_search_results(search_html)[:2]:
-        print(asdict(card))
+    for job in fetch_job_details(parse_search_results(search_html)[:2]):
+        print(asdict(job))
     return 0
 
 
