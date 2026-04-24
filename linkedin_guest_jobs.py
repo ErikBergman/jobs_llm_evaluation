@@ -31,6 +31,15 @@ SEARCH_FIELD_ALIASES = {
     "distance": ("distance",),
     "f_TPR": ("f_TPR", "date_posted"),
     "f_E": ("f_E", "experience_levels"),
+    "f_JT": ("f_JT", "job_types"),
+    "f_WT": ("f_WT", "work_types"),
+    "f_AL": ("f_AL", "easy_apply"),
+    "f_EA": ("f_EA", "easy_apply_alt"),
+    "f_JIYN": ("f_JIYN", "in_network"),
+    "f_VJ": ("f_VJ", "verified_jobs"),
+    "f_C": ("f_C", "company_ids"),
+    "f_PP": ("f_PP", "place_ids"),
+    "sortBy": ("sortBy", "sort_by"),
 }
 
 
@@ -173,9 +182,86 @@ class TextParser(HTMLParser):
         return clean_text("".join(self.chunks))
 
 
+def strip_json_comments(text: str) -> str:
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escape = False
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+
+        if in_string:
+            output.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+        elif char == "/" and next_char == "/":
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+        elif char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < len(text) and not (text[index] == "*" and text[index + 1] == "/"):
+                index += 1
+            index += 2
+        else:
+            output.append(char)
+            index += 1
+    return "".join(output)
+
+
+def strip_json_trailing_commas(text: str) -> str:
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escape = False
+    while index < len(text):
+        char = text[index]
+
+        if in_string:
+            output.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+        elif char == ",":
+            lookahead = index + 1
+            while lookahead < len(text) and text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(text) and text[lookahead] in "}]":
+                index += 1
+            else:
+                output.append(char)
+                index += 1
+        else:
+            output.append(char)
+            index += 1
+    return "".join(output)
+
+
 def load_search_config(input_path: Path) -> dict[str, object]:
     with open(input_path, encoding="utf-8") as input_file:
-        data = json.load(input_file)
+        data = json.loads(strip_json_trailing_commas(strip_json_comments(input_file.read())))
     if not isinstance(data, dict):
         raise ValueError(f"{input_path} must contain a JSON object")
     return data
@@ -190,6 +276,8 @@ def first_config_value(config: dict[str, object], aliases: tuple[str, ...]) -> o
 
 
 def normalize_query_value(value: object) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
     if isinstance(value, list):
         return ",".join(str(item) for item in value)
     return str(value)
@@ -206,6 +294,12 @@ def search_url_from_config(config: dict[str, object]) -> str:
         if value not in (None, "", []):
             params[linked_in_key] = normalize_query_value(value)
 
+    extra_params = config.get("extra_params")
+    if isinstance(extra_params, dict):
+        for key, value in extra_params.items():
+            if value not in (None, "", []):
+                params[str(key)] = normalize_query_value(value)
+
     if "keywords" not in params and "location" not in params:
         raise ValueError("Input JSON must contain search_url, keywords/search_terms, or location")
 
@@ -214,7 +308,7 @@ def search_url_from_config(config: dict[str, object]) -> str:
 
 def guest_search_url(search_url: str, start: int = 0) -> str:
     query = dict(parse_qsl(urlparse(search_url).query, keep_blank_values=True))
-    allowed_keys = {"keywords", "geoId", "location", "distance", "f_TPR", "f_E"}
+    allowed_keys = {"start", *SEARCH_FIELD_ALIASES}
     params = {key: value for key, value in query.items() if key in allowed_keys and value}
     params["start"] = str(start)
     return f"{GUEST_SEARCH_URL}?{urlencode(params)}"

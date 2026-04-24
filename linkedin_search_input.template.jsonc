@@ -1,0 +1,57 @@
+{
+  // Preferred path: paste a full LinkedIn jobs search URL here.
+  // If search_url is present and non-empty, the script ignores the field-based filters below.
+  // "search_url": "https://www.linkedin.com/jobs/search-results/?keywords=engineer&geoId=105734258&distance=0.0&f_TPR=r86400",
+
+  // Field-based path: omit search_url and the script builds a LinkedIn search URL.
+  // Boolean logic is accepted by LinkedIn in keywords, e.g. "\"Python\" OR \"Backend\"".
+  "keywords": "engineer in lund",
+
+  // Optional location text. geo_id is usually more stable when you can get it from a LinkedIn URL.
+  // "location": "Lund, Skane County, Sweden",
+  "geo_id": "105734258",
+
+  // Distance is a radius in miles from the geo_id/location. Use "0.0" for exact/nearby only.
+  "distance": "0.0",
+
+  // Date posted filter. Syntax is "r" + seconds.
+  // Examples: r3600 = last hour, r86400 = last 24h, r604800 = last week, r2592000 = last month.
+  "date_posted": "r86400",
+
+  // Sort order. Common values: DD = newest first, R = relevance.
+  "sort_by": "DD",
+
+  // Experience levels. LinkedIn f_E values:
+  // 1 = Internship, 2 = Entry level, 3 = Associate,
+  // 4 = Mid-Senior level, 5 = Director, 6 = Executive.
+  // "experience_levels": ["2", "3"],
+
+  // Job types. LinkedIn f_JT values:
+  // F = Full-time, P = Part-time, C = Contract, T = Temporary,
+  // I = Internship, V = Volunteer, O = Other.
+  // "job_types": ["F", "C"],
+
+  // Work types. LinkedIn f_WT values:
+  // 1 = On-site, 2 = Remote, 3 = Hybrid.
+  // "work_types": ["2", "3"],
+
+  // Company/place filters use LinkedIn numeric IDs.
+  // f_C = company IDs, f_PP = populated-place/city IDs.
+  // "company_ids": ["1441"],
+  // "place_ids": ["105734258"],
+
+  // Reported boolean filters. These are based on observed/community URL parameters and may change.
+  // f_AL is commonly reported as Easy Apply or actively/simplified application, depending on source.
+  // f_EA is also reported as Easy Apply in some URL guides.
+  // f_JIYN is reported as network-related in logged-in contexts and fewer-applicants in guest docs.
+  // "easy_apply": true,
+  // "easy_apply_alt": true,
+  // "in_network": true,
+  // "verified_jobs": true,
+
+  // Exact LinkedIn query parameters can be supplied here when a filter is not modeled above.
+  // Values may be strings, booleans, or arrays; arrays become comma-separated lists.
+  // "extra_params": {
+  //   "f_AL": true
+  // }
+}

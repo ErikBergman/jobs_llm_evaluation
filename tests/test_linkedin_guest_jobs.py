@@ -1,7 +1,9 @@
+import tempfile
 import unittest
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from linkedin_guest_jobs import GUEST_SEARCH_URL, search_url_from_config, guest_search_url
+from linkedin_guest_jobs import GUEST_SEARCH_URL, guest_search_url, load_search_config, search_url_from_config
 
 
 class SearchUrlTests(unittest.TestCase):
@@ -18,6 +20,11 @@ class SearchUrlTests(unittest.TestCase):
                 "distance": "0.0",
                 "date_posted": "r86400",
                 "experience_levels": ["2", "3"],
+                "job_types": ["F", "C"],
+                "work_types": ["2", "3"],
+                "easy_apply": True,
+                "verified_jobs": True,
+                "sort_by": "DD",
             }
         )
 
@@ -32,6 +39,11 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(query["distance"], ["0.0"])
         self.assertEqual(query["f_TPR"], ["r86400"])
         self.assertEqual(query["f_E"], ["2,3"])
+        self.assertEqual(query["f_JT"], ["F,C"])
+        self.assertEqual(query["f_WT"], ["2,3"])
+        self.assertEqual(query["f_AL"], ["true"])
+        self.assertEqual(query["f_VJ"], ["true"])
+        self.assertEqual(query["sortBy"], ["DD"])
 
     def test_constructed_url_maps_to_guest_endpoint(self) -> None:
         search_url = search_url_from_config(
@@ -53,6 +65,26 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(query["distance"], ["0.0"])
         self.assertEqual(query["f_TPR"], ["r86400"])
         self.assertEqual(query["start"], ["0"])
+
+    def test_loads_jsonc_template_style_comments(self) -> None:
+        content = """
+        {
+          // Comment outside a string.
+          "keywords": "engineer // this remains text",
+          "geo_id": "105734258",
+          /* Block comment. */
+          "date_posted": "r86400",
+        }
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "input.jsonc"
+            input_path.write_text(content, encoding="utf-8")
+
+            config = load_search_config(input_path)
+
+        self.assertEqual(config["keywords"], "engineer // this remains text")
+        self.assertEqual(config["geo_id"], "105734258")
+        self.assertEqual(config["date_posted"], "r86400")
 
 
 if __name__ == "__main__":
