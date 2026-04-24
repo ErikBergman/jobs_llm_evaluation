@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
+import sys
 from dataclasses import asdict, dataclass
 from html import unescape
 from html.parser import HTMLParser
+from typing import Iterable
 from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
@@ -232,7 +236,7 @@ def parse_job_detail(html: str, card: JobCard) -> JobDetail:
     return JobDetail(**payload)
 
 
-def fetch_job_details(cards: list[JobCard]) -> list[JobDetail]:
+def fetch_job_details(cards: Iterable[JobCard]) -> list[JobDetail]:
     jobs: list[JobDetail] = []
     for card in cards:
         detail_html = fetch(GUEST_DETAIL_URL.format(job_id=card.job_id))
@@ -241,9 +245,24 @@ def fetch_job_details(cards: list[JobCard]) -> list[JobDetail]:
 
 
 def main() -> int:
-    search_html = fetch(guest_search_url(DEFAULT_SEARCH_URL))
-    for job in fetch_job_details(parse_search_results(search_html)[:2]):
-        print(asdict(job))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default=DEFAULT_SEARCH_URL, help="LinkedIn jobs search-results URL")
+    parser.add_argument("--limit", type=int, default=2, help="Number of jobs to fetch")
+    parser.add_argument("--output", default="linkedin_jobs_sample.json", help="JSON output path")
+    args = parser.parse_args()
+
+    search_html = fetch(guest_search_url(args.url))
+    cards = parse_search_results(search_html)
+    if not cards:
+        print("No public job cards found.", file=sys.stderr)
+        return 1
+
+    jobs = fetch_job_details(cards[: args.limit])
+    payload = [asdict(job) for job in jobs]
+    with open(args.output, "w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, ensure_ascii=False, indent=2)
+
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 
