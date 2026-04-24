@@ -209,6 +209,8 @@ __marimo__/
 results/*
 !results/.gitkeep
 !results/discard/
+results/discard/*
 !results/discard/.gitkeep
 !results/hits/
+results/hits/*
 !results/hits/.gitkeep

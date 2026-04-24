@@ -17,18 +17,21 @@ from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 
-DEFAULT_SEARCH_URL = (
-    "https://www.linkedin.com/jobs/search-results/?currentJobId=&"
-    "keywords=engineer%20in%20lund&origin=JOB_SEARCH_PAGE_JOB_FILTER&"
-    "referralSearchId=nIEYkI%2BL42AY3hrGVYz2Jg%3D%3D&geoId=105734258&"
-    "distance=0.0&f_TPR=r86400"
-)
-
+LINKEDIN_SEARCH_URL = "https://www.linkedin.com/jobs/search-results/"
 GUEST_SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 GUEST_DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+DEFAULT_INPUT_PATH = Path("linkedin_search_input.json")
 DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
+SEARCH_FIELD_ALIASES = {
+    "keywords": ("keywords", "search_terms", "query"),
+    "location": ("location",),
+    "geoId": ("geoId", "geo_id"),
+    "distance": ("distance",),
+    "f_TPR": ("f_TPR", "date_posted"),
+    "f_E": ("f_E", "experience_levels"),
+}
 
 
 @dataclass
@@ -170,6 +173,45 @@ class TextParser(HTMLParser):
         return clean_text("".join(self.chunks))
 
 
+def load_search_config(input_path: Path) -> dict[str, object]:
+    with open(input_path, encoding="utf-8") as input_file:
+        data = json.load(input_file)
+    if not isinstance(data, dict):
+        raise ValueError(f"{input_path} must contain a JSON object")
+    return data
+
+
+def first_config_value(config: dict[str, object], aliases: tuple[str, ...]) -> object | None:
+    for alias in aliases:
+        value = config.get(alias)
+        if value not in (None, "", []):
+            return value
+    return None
+
+
+def normalize_query_value(value: object) -> str:
+    if isinstance(value, list):
+        return ",".join(str(item) for item in value)
+    return str(value)
+
+
+def search_url_from_config(config: dict[str, object]) -> str:
+    search_url = config.get("search_url")
+    if isinstance(search_url, str) and search_url.strip():
+        return search_url.strip()
+
+    params: dict[str, str] = {"origin": "JOB_SEARCH_PAGE_JOB_FILTER"}
+    for linked_in_key, aliases in SEARCH_FIELD_ALIASES.items():
+        value = first_config_value(config, aliases)
+        if value not in (None, "", []):
+            params[linked_in_key] = normalize_query_value(value)
+
+    if "keywords" not in params and "location" not in params:
+        raise ValueError("Input JSON must contain search_url, keywords/search_terms, or location")
+
+    return f"{LINKEDIN_SEARCH_URL}?{urlencode(params)}"
+
+
 def guest_search_url(search_url: str, start: int = 0) -> str:
     query = dict(parse_qsl(urlparse(search_url).query, keep_blank_values=True))
     allowed_keys = {"keywords", "geoId", "location", "distance", "f_TPR", "f_E"}
@@ -256,12 +298,13 @@ def timestamped_output_path(output_name: str, results_root: Path = DEFAULT_RESUL
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default=DEFAULT_SEARCH_URL, help="LinkedIn jobs search-results URL")
+    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH, help="Search input JSON path")
     parser.add_argument("--limit", type=int, default=2, help="Number of jobs to fetch")
     parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
     args = parser.parse_args()
 
-    search_html = fetch(guest_search_url(args.url))
+    search_url = search_url_from_config(load_search_config(args.input))
+    search_html = fetch(guest_search_url(search_url))
     cards = parse_search_results(search_html)
     if not cards:
         print("No public job cards found.", file=sys.stderr)
