@@ -8,8 +8,10 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Iterable
 from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -24,6 +26,9 @@ DEFAULT_SEARCH_URL = (
 
 GUEST_SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 GUEST_DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+DEFAULT_RESULTS_ROOT = Path("results")
+DEFAULT_RESULTS_BUCKET = "discard"
+DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
 
 
 @dataclass
@@ -244,11 +249,16 @@ def fetch_job_details(cards: Iterable[JobCard]) -> list[JobDetail]:
     return jobs
 
 
+def timestamped_output_path(output_name: str, results_root: Path = DEFAULT_RESULTS_ROOT) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return results_root / DEFAULT_RESULTS_BUCKET / timestamp / Path(output_name).name
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default=DEFAULT_SEARCH_URL, help="LinkedIn jobs search-results URL")
     parser.add_argument("--limit", type=int, default=2, help="Number of jobs to fetch")
-    parser.add_argument("--output", default="linkedin_jobs_sample.json", help="JSON output path")
+    parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
     args = parser.parse_args()
 
     search_html = fetch(guest_search_url(args.url))
@@ -259,9 +269,12 @@ def main() -> int:
 
     jobs = fetch_job_details(cards[: args.limit])
     payload = [asdict(job) for job in jobs]
-    with open(args.output, "w", encoding="utf-8") as output_file:
+    output_path = timestamped_output_path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as output_file:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
+    print(f"Wrote {output_path}")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
