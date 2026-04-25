@@ -43,10 +43,10 @@ def split_jobs(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[d
 
 def timestamp_from_input(input_path: Path) -> str:
     parts = input_path.parts
-    for index in range(len(parts) - 2):
-        if parts[index] == "results" and parts[index + 1] == "discard":
-            return parts[index + 2]
-    raise ValueError("--timestamp is required unless --input is under results/discard/<timestamp>/")
+    for index in range(len(parts) - 1):
+        if parts[index] == "discard":
+            return parts[index + 1]
+    raise ValueError("--timestamp is required unless --input is under <output-root>/discard/<timestamp>/")
 
 
 def output_paths(input_path: Path, output_root: Path, timestamp: str) -> tuple[Path, Path]:

@@ -22,6 +22,11 @@ class MockMatcherTests(unittest.TestCase):
 
         self.assertEqual(timestamp_from_input(input_path), "20260425_120000")
 
+    def test_timestamp_is_derived_from_runtime_results_input_path(self) -> None:
+        input_path = Path("runtime_results/discard/20260425_083223/linkedin_jobs_sample.json")
+
+        self.assertEqual(timestamp_from_input(input_path), "20260425_083223")
+
     def test_classify_file_splits_results_into_buckets(self) -> None:
         jobs = [
             {"job_id": "1", "description": "Engineer needed"},
