@@ -55,6 +55,7 @@ The profile file may be plain text or RTF. Local profile files named `job_profil
 GitHub Actions usage:
 
 - add repository secret `OPENAI_API_KEY`
+- add repository secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for scheduled summaries
 - add repository variable `JOB_MATCHER_MODE=openai`
 - optionally add repository variable `OPENAI_MODEL=gpt-5.4-mini`
 - keep `job_profile.rtf` in the configured Koofr memory folder
@@ -66,6 +67,10 @@ If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.
 Set repository variable `CHEAT_MODE=true` to inject `cheat_mode_job_ad.rtf` as one scraped job result. In GitHub Actions, keep that file in the same Koofr memory folder as `job_profile.rtf`; locally, place it under the selected `--results-root` or pass `--cheat-ad /path/to/cheat_mode_job_ad.rtf`.
 
 When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. The workflow prints a `[cheat-mode]` log line with the language-model decision for `cheat-mode-perfect-job` and fails the run if the model does not classify it as a hit.
+
+## Telegram summaries
+
+Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
 
 Each matching run writes an audit file next to the discard output:
 

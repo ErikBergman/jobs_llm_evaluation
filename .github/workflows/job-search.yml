@@ -88,7 +88,7 @@ jobs:
         if: steps.schedule_gate.outputs.run_job == 'true'
         run: |
           python3 -m unittest
-          python3 -m py_compile linkedin_guest_jobs.py match_jobs.py
+          python3 -m py_compile linkedin_guest_jobs.py match_jobs.py telegram_notify.py
 
       - name: Scrape new jobs
         if: steps.schedule_gate.outputs.run_job == 'true'
@@ -151,6 +151,22 @@ jobs:
             --matcher "$JOB_MATCHER_MODE" \
             --openai-model "$OPENAI_MODEL" \
             --job-profile "$JOB_PROFILE_PATH"
+
+      - name: Send Telegram summary
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        env:
+          RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
+          SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        shell: bash
+        run: |
+          args=(--results-root "$RUNTIME_RESULTS_DIR" --hours 12)
+          if [[ -n "$SCRAPE_PATH" ]]; then
+            args+=(--current-input "$SCRAPE_PATH")
+          fi
+
+          python3 telegram_notify.py "${args[@]}"
 
       - name: Upload result memory to Koofr
         if: always() && steps.schedule_gate.outputs.run_job == 'true'
