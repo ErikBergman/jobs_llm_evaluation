@@ -12,7 +12,7 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
@@ -24,6 +24,7 @@ DEFAULT_INPUT_PATH = Path("linkedin_search_input.json")
 DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
+DEFAULT_MAX_SEARCH_PAGES = 10
 SEARCH_FIELD_ALIASES = {
     "keywords": ("keywords", "search_terms", "query"),
     "location": ("location",),
@@ -335,6 +336,70 @@ def parse_search_results(html: str) -> list[JobCard]:
     return parser.cards
 
 
+def job_ids_from_payload(payload: object) -> set[str]:
+    job_ids: set[str] = set()
+    if isinstance(payload, dict):
+        job_id = payload.get("job_id")
+        if job_id not in (None, ""):
+            job_ids.add(str(job_id))
+        for value in payload.values():
+            job_ids.update(job_ids_from_payload(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            job_ids.update(job_ids_from_payload(item))
+    return job_ids
+
+
+def load_seen_job_ids(results_root: Path) -> set[str]:
+    seen_job_ids: set[str] = set()
+    if not results_root.exists():
+        return seen_job_ids
+
+    for result_path in results_root.rglob("*.json"):
+        try:
+            with open(result_path, encoding="utf-8") as result_file:
+                seen_job_ids.update(job_ids_from_payload(json.load(result_file)))
+        except (OSError, json.JSONDecodeError):
+            print(f"Skipping unreadable result memory file: {result_path}", file=sys.stderr)
+    return seen_job_ids
+
+
+def select_unseen_cards(cards: Iterable[JobCard], seen_job_ids: set[str], limit: int) -> list[JobCard]:
+    if limit <= 0:
+        return []
+    selected: list[JobCard] = []
+    for card in cards:
+        if card.job_id in seen_job_ids:
+            continue
+        selected.append(card)
+        seen_job_ids.add(card.job_id)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def collect_unseen_cards(
+    search_url: str,
+    limit: int,
+    seen_job_ids: set[str],
+    max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    fetch_html: Callable[[str], str] = fetch,
+) -> list[JobCard]:
+    if limit <= 0:
+        return []
+    selected: list[JobCard] = []
+    start = 0
+    for _ in range(max_pages):
+        page_cards = parse_search_results(fetch_html(guest_search_url(search_url, start=start)))
+        if not page_cards:
+            break
+        selected.extend(select_unseen_cards(page_cards, seen_job_ids, limit - len(selected)))
+        if len(selected) >= limit:
+            break
+        start += len(page_cards)
+    return selected
+
+
 def extract_description(html: str) -> str:
     class_match = re.search(r'<div\b[^>]*class="[^"]*\bshow-more-less-html__markup\b[^"]*"[^>]*>', html)
     if not class_match:
@@ -393,20 +458,22 @@ def timestamped_output_path(output_name: str, results_root: Path = DEFAULT_RESUL
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH, help="Search input JSON path")
-    parser.add_argument("--limit", type=int, default=2, help="Number of jobs to fetch")
+    parser.add_argument("--limit", type=int, default=2, help="Number of new jobs to fetch")
     parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
+    parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT, help="Results memory root")
+    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_SEARCH_PAGES, help="Maximum search pages to scan")
     args = parser.parse_args()
 
     search_url = search_url_from_config(load_search_config(args.input))
-    search_html = fetch(guest_search_url(search_url))
-    cards = parse_search_results(search_html)
+    seen_job_ids = load_seen_job_ids(args.results_root)
+    cards = collect_unseen_cards(search_url, args.limit, seen_job_ids, max_pages=args.max_pages)
     if not cards:
-        print("No public job cards found.", file=sys.stderr)
+        print("No new public job cards found.", file=sys.stderr)
         return 1
 
-    jobs = fetch_job_details(cards[: args.limit])
+    jobs = fetch_job_details(cards)
     payload = [asdict(job) for job in jobs]
-    output_path = timestamped_output_path(args.output)
+    output_path = timestamped_output_path(args.output, results_root=args.results_root)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as output_file:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)

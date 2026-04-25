@@ -1,9 +1,19 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from linkedin_guest_jobs import GUEST_SEARCH_URL, guest_search_url, load_search_config, search_url_from_config
+from linkedin_guest_jobs import (
+    GUEST_SEARCH_URL,
+    JobCard,
+    collect_unseen_cards,
+    guest_search_url,
+    load_search_config,
+    load_seen_job_ids,
+    search_url_from_config,
+    select_unseen_cards,
+)
 
 
 class SearchUrlTests(unittest.TestCase):
@@ -85,6 +95,58 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(config["keywords"], "engineer // this remains text")
         self.assertEqual(config["geo_id"], "105734258")
         self.assertEqual(config["date_posted"], "r86400")
+
+    def test_load_seen_job_ids_reads_nested_result_jsons(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_root = Path(temp_dir) / "results"
+            (results_root / "discard" / "20260425_120000").mkdir(parents=True)
+            (results_root / "hits" / "20260425_120000").mkdir(parents=True)
+            (results_root / "discard" / "20260425_120000" / "jobs.json").write_text(
+                json.dumps([{"job_id": 123}, {"nested": {"job_id": "456"}}]),
+                encoding="utf-8",
+            )
+            (results_root / "hits" / "20260425_120000" / "jobs_hits.json").write_text(
+                json.dumps([{"job_id": "789"}]),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(load_seen_job_ids(results_root), {"123", "456", "789"})
+
+    def test_select_unseen_cards_does_not_count_seen_jobs_toward_limit(self) -> None:
+        cards = [JobCard("seen"), JobCard("new-1"), JobCard("new-2"), JobCard("new-3")]
+        seen_job_ids = {"seen"}
+
+        selected = select_unseen_cards(cards, seen_job_ids, limit=2)
+
+        self.assertEqual([card.job_id for card in selected], ["new-1", "new-2"])
+        self.assertEqual(seen_job_ids, {"seen", "new-1", "new-2"})
+
+    def test_collect_unseen_cards_paginates_until_limit_of_new_jobs(self) -> None:
+        pages = {
+            "start=0": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:seen"></div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:new-1"></div>
+            """,
+            "start=2": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:new-2"></div>
+            """,
+        }
+
+        def fake_fetch(url: str) -> str:
+            for marker, html in pages.items():
+                if marker in url:
+                    return html
+            return ""
+
+        cards = collect_unseen_cards(
+            "https://www.linkedin.com/jobs/search-results/?keywords=engineer",
+            limit=2,
+            seen_job_ids={"seen"},
+            max_pages=3,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["new-1", "new-2"])
 
 
 if __name__ == "__main__":
