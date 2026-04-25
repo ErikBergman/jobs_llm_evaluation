@@ -101,7 +101,7 @@ jobs:
             --results-root "${RUNTIME_RESULTS_DIR}" \
             --limit "${JOB_SEARCH_LIMIT}" \
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
-            --output linkedin_jobs_sample.json | tee scrape.log
+            --output linkedin_jobs_sample.json 2>&1 | tee scrape.log
           scrape_status="${PIPESTATUS[0]}"
           set -e
 
