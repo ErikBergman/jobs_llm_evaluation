@@ -38,6 +38,12 @@ The matcher also has an OpenAI mode. It is intentionally not the default, becaus
 
 OpenAI mode asks the model whether the job is a rare "unicorn" match for the candidate profile. It should only put a small fraction of unusually strong matches in `hits`; generic keyword overlap should stay in `discard`. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
 
+The OpenAI matcher runs in two stages:
+
+1. One batch triage call reads the profile once and scans all newly scraped ads.
+2. Only ads selected for the temporary candidate list get a second, stateless confirmation call.
+3. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
+
 Local usage:
 
 ```bash

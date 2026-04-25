@@ -20,6 +20,7 @@ DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
+DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS = 2048
 DEFAULT_JOB_PROFILE_PATH = Path("job_profile.txt")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 RTF_DESTINATIONS = {
@@ -170,6 +171,26 @@ def job_ad_text(job: dict[str, Any]) -> str:
     return "\n".join(f"{label}: {value}" for label, value in fields if isinstance(value, str) and value.strip())
 
 
+def job_candidate_id(job: dict[str, Any], index: int) -> str:
+    job_id = job.get("job_id")
+    if isinstance(job_id, str) and job_id:
+        return job_id
+    if isinstance(job_id, int):
+        return str(job_id)
+    return f"index-{index}"
+
+
+def compact_job_ad(job: dict[str, Any], candidate_id: str) -> dict[str, str]:
+    fields = {
+        "candidate_id": candidate_id,
+        "title": job.get("title", ""),
+        "company": job.get("company", ""),
+        "location": job.get("location", ""),
+        "description": job.get("description", ""),
+    }
+    return {key: value for key, value in fields.items() if isinstance(value, str) and value.strip()}
+
+
 def openai_unicorn_prompt(job: dict[str, Any], profile: str) -> str:
     return (
         "You are a strict job-match classifier. Determine whether the job ad is a rare 'unicorn' match "
@@ -182,6 +203,41 @@ def openai_unicorn_prompt(job: dict[str, Any], profile: str) -> str:
         "- reason: one concise sentence explaining the decision\n\n"
         f"Candidate profile:\n{profile}\n\n"
         f"Job ad:\n{job_ad_text(job)}"
+    )
+
+
+def openai_unicorn_confirmation_prompt(job: dict[str, Any], profile: str) -> str:
+    return (
+        "You are a strict second-stage job-match classifier. This is a fresh, stateless review of one job ad "
+        "that passed a broad first-stage triage. Determine whether it is truly a rare 'unicorn' match for the "
+        "candidate profile. Only set hit=true when the ad strongly combines several distinctive parts of the "
+        "candidate profile and looks unusually well suited. Prefer false for generic matches, plausible-but-normal "
+        "matches, or jobs that only overlap on common keywords.\n\n"
+        "Return JSON only with:\n"
+        "- hit: boolean\n"
+        "- reason: one concise sentence explaining the decision\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        f"Job ad:\n{job_ad_text(job)}"
+    )
+
+
+def openai_unicorn_triage_prompt(jobs: list[dict[str, Any]], profile: str) -> str:
+    ads = [
+        compact_job_ad(job, job_candidate_id(job, index))
+        for index, job in enumerate(jobs)
+    ]
+    return (
+        "You are doing first-stage triage for a strict job-match workflow. Read the candidate profile once, "
+        "then scan all job ads. Build a temporary candidate list containing only jobs that might plausibly be "
+        "rare 'unicorn' matches after stricter review. Be selective: generic engineering jobs, ordinary keyword "
+        "matches, and weak single-factor overlaps should not be candidates. This stage may include uncertain but "
+        "promising ads, but it should still keep the list small.\n\n"
+        "Return JSON only with a candidates array. Each candidate must include:\n"
+        "- candidate_id: exactly one candidate_id from the input ads\n"
+        "- reason: one concise sentence explaining why it deserves second-stage review\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        "Job ads JSON:\n"
+        f"{json.dumps(ads, ensure_ascii=False, indent=2)}"
     )
 
 
@@ -246,6 +302,34 @@ def parse_match_response(response_text: str) -> tuple[bool, str]:
     return hit, reason.strip()
 
 
+def parse_triage_response(response_text: str, valid_candidate_ids: set[str]) -> list[dict[str, str]]:
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"OpenAI triage response was not valid JSON: {response_text!r}") from error
+
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        raise ValueError(f"OpenAI triage response JSON must contain array 'candidates': {response_text!r}")
+
+    parsed: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            raise ValueError(f"OpenAI triage candidate must be an object: {response_text!r}")
+        candidate_id = candidate.get("candidate_id")
+        reason = candidate.get("reason")
+        if not isinstance(candidate_id, str) or candidate_id not in valid_candidate_ids:
+            raise ValueError(f"OpenAI triage returned unknown candidate_id: {candidate_id!r}")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"OpenAI triage candidate must contain non-empty string 'reason': {response_text!r}")
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        parsed.append({"candidate_id": candidate_id, "reason": reason.strip()})
+    return parsed
+
+
 def parse_hit_response(response_text: str) -> bool:
     try:
         payload = json.loads(response_text)
@@ -273,14 +357,15 @@ def mock_match_decision(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def call_openai_match_decision(
-    job: dict[str, Any],
+def call_openai_structured_json(
     api_key: str,
     prompt: str,
     schema_name: str,
+    schema: dict[str, Any],
     model: str = DEFAULT_OPENAI_MODEL,
+    max_output_tokens: int = DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str]:
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required when --matcher openai is used")
 
@@ -294,18 +379,10 @@ def call_openai_match_decision(
                 "type": "json_schema",
                 "name": schema_name,
                 "strict": True,
-                "schema": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "hit": {"type": "boolean"},
-                        "reason": {"type": "string"},
-                    },
-                    "required": ["hit", "reason"],
-                },
+                "schema": schema,
             }
         },
-        "max_output_tokens": DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
+        "max_output_tokens": max_output_tokens,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -315,6 +392,59 @@ def call_openai_match_decision(
     response_text = extract_response_text(response_payload)
     if not response_text:
         raise ValueError(f"OpenAI response did not include output text: {summarize_response_shape(response_payload)}")
+    return response_payload, response_text
+
+
+def match_decision_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "hit": {"type": "boolean"},
+            "reason": {"type": "string"},
+        },
+        "required": ["hit", "reason"],
+    }
+
+
+def triage_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "candidates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "candidate_id": {"type": "string"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["candidate_id", "reason"],
+                },
+            },
+        },
+        "required": ["candidates"],
+    }
+
+
+def call_openai_match_decision(
+    job: dict[str, Any],
+    api_key: str,
+    prompt: str,
+    schema_name: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    response_payload, response_text = call_openai_structured_json(
+        api_key,
+        prompt,
+        schema_name,
+        match_decision_schema(),
+        model=model,
+        post_json=post_json,
+    )
     hit, reason = parse_match_response(response_text)
     return {
         "job_id": job.get("job_id"),
@@ -337,11 +467,99 @@ def call_openai_unicorn_decision(
     return call_openai_match_decision(
         job,
         api_key,
-        openai_unicorn_prompt(job, profile),
+        openai_unicorn_confirmation_prompt(job, profile),
         "job_unicorn_match",
         model=model,
         post_json=post_json,
     )
+
+
+def call_openai_unicorn_triage(
+    jobs: list[dict[str, Any]],
+    api_key: str,
+    profile: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    candidate_ids = {
+        job_candidate_id(job, index)
+        for index, job in enumerate(jobs)
+    }
+    response_payload, response_text = call_openai_structured_json(
+        api_key,
+        openai_unicorn_triage_prompt(jobs, profile),
+        "job_unicorn_triage",
+        triage_schema(),
+        model=model,
+        max_output_tokens=DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
+        post_json=post_json,
+    )
+    candidates = parse_triage_response(response_text, candidate_ids)
+    return {
+        "candidates": candidates,
+        "model": response_payload.get("model", model),
+        "raw_response": response_text,
+    }
+
+
+def openai_two_stage_decisions(
+    jobs: list[dict[str, Any]],
+    api_key: str,
+    profile: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    triage = call_openai_unicorn_triage(jobs, api_key, profile, model=model, post_json=post_json)
+    triage_reasons = {
+        candidate["candidate_id"]: candidate["reason"]
+        for candidate in triage["candidates"]
+    }
+    candidate_id_by_index = {
+        index: job_candidate_id(job, index)
+        for index, job in enumerate(jobs)
+    }
+    job_by_candidate_id = {
+        candidate_id: jobs[index]
+        for index, candidate_id in candidate_id_by_index.items()
+    }
+
+    confirmation_decisions: dict[str, dict[str, Any]] = {}
+    for candidate in triage["candidates"]:
+        candidate_id = candidate["candidate_id"]
+        confirmation = call_openai_unicorn_decision(
+            job_by_candidate_id[candidate_id],
+            api_key,
+            profile,
+            model=model,
+            post_json=post_json,
+        )
+        confirmation["stage"] = "confirmation"
+        confirmation["candidate_id"] = candidate_id
+        confirmation["triage_reason"] = candidate["reason"]
+        confirmation_decisions[candidate_id] = confirmation
+
+    decisions: list[dict[str, Any]] = []
+    for index, job in enumerate(jobs):
+        candidate_id = candidate_id_by_index[index]
+        if candidate_id in confirmation_decisions:
+            decisions.append(confirmation_decisions[candidate_id])
+        else:
+            decisions.append({
+                "job_id": job.get("job_id"),
+                "title": job.get("title"),
+                "hit": False,
+                "reason": "Rejected by first-stage OpenAI triage.",
+                "matcher": "openai",
+                "model": triage["model"],
+                "stage": "triage",
+                "candidate_id": candidate_id,
+            })
+
+    for decision in decisions:
+        decision["triage_candidate_count"] = len(triage["candidates"])
+        if decision.get("candidate_id") in triage_reasons:
+            decision["triage_reason"] = triage_reasons[decision["candidate_id"]]
+    return decisions
 
 
 def call_openai_title_vowel_decision(
@@ -425,6 +643,22 @@ def split_jobs_with_decisions(
     return hits, discards, decisions
 
 
+def split_jobs_from_decisions(
+    jobs: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if len(jobs) != len(decisions):
+        raise ValueError("Decision count must match job count")
+    hits: list[dict[str, Any]] = []
+    discards: list[dict[str, Any]] = []
+    for job, decision in zip(jobs, decisions):
+        if decision["hit"]:
+            hits.append(job)
+        else:
+            discards.append(job)
+    return hits, discards
+
+
 def timestamp_from_input(input_path: Path) -> str:
     parts = input_path.parts
     for index in range(len(parts) - 1):
@@ -479,12 +713,17 @@ def classify_file(
     output_root: Path,
     timestamp: str | None = None,
     decisioner: Callable[[dict[str, Any]], dict[str, Any]] = mock_match_decision,
+    decisions_provider: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
     matcher_name: str = DEFAULT_MATCHER,
     model: str | None = None,
 ) -> tuple[Path, Path, Path, dict[str, Any]]:
     resolved_timestamp = timestamp or timestamp_from_input(input_path)
     jobs = load_jobs(input_path)
-    hits, discards, decisions = split_jobs_with_decisions(jobs, decisioner=decisioner)
+    if decisions_provider is None:
+        hits, discards, decisions = split_jobs_with_decisions(jobs, decisioner=decisioner)
+    else:
+        decisions = decisions_provider(jobs)
+        hits, discards = split_jobs_from_decisions(jobs, decisions)
     hits_path, discards_path, metadata_path = output_paths(input_path, output_root, resolved_timestamp)
     metadata = {
         "matcher": matcher_name,
@@ -542,17 +781,18 @@ def main() -> int:
 
     try:
         input_path = input_from_latest(args.output_root) if args.latest else args.input
-        decisioner = decisioner_from_args(
-            args.matcher,
-            os.environ.get("OPENAI_API_KEY"),
-            args.openai_model,
-            profile_path=args.job_profile,
-        )
+        decisioner = mock_match_decision
+        decisions_provider = None
+        if args.matcher == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY", "")
+            profile = load_job_profile(args.job_profile)
+            decisions_provider = lambda jobs: openai_two_stage_decisions(jobs, api_key, profile, model=args.openai_model)
         hits_path, discards_path, metadata_path, metadata = classify_file(
             input_path,
             args.output_root,
             args.timestamp,
             decisioner=decisioner,
+            decisions_provider=decisions_provider,
             matcher_name=args.matcher,
             model=args.openai_model if args.matcher == "openai" else None,
         )

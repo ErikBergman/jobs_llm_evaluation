@@ -6,10 +6,12 @@ from pathlib import Path
 from match_jobs import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
+    DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
     call_openai_unicorn_decision,
+    call_openai_unicorn_triage,
     classify_file,
     extract_response_text,
     input_from_latest,
@@ -17,12 +19,16 @@ from match_jobs import (
     latest_discard_run,
     load_job_profile,
     mock_match_decision,
+    openai_two_stage_decisions,
     openai_title_vowel_prompt,
+    openai_unicorn_triage_prompt,
     openai_unicorn_prompt,
     parse_match_response,
     parse_hit_response,
+    parse_triage_response,
     rtf_to_text,
     split_jobs,
+    split_jobs_from_decisions,
     split_jobs_with_decisions,
     summarize_response_shape,
     timestamp_from_input,
@@ -78,6 +84,21 @@ class MockMatcherTests(unittest.TestCase):
         self.assertIn("Location: Lund", prompt)
         self.assertIn("Description: Build regulated medical devices.", prompt)
 
+    def test_openai_unicorn_triage_prompt_batches_jobs_with_profile_once(self) -> None:
+        prompt = openai_unicorn_triage_prompt(
+            [
+                {"job_id": "1", "title": "Principal Safety Engineer", "description": "Build regulated devices."},
+                {"job_id": "2", "title": "Frontend Engineer", "description": "Maintain web UI."},
+            ],
+            "Candidate has regulated product leadership experience.",
+        )
+
+        self.assertIn("Read the candidate profile once", prompt)
+        self.assertEqual(prompt.count("Candidate has regulated product leadership experience."), 1)
+        self.assertIn('"candidate_id": "1"', prompt)
+        self.assertIn('"candidate_id": "2"', prompt)
+        self.assertIn("temporary candidate list", prompt)
+
     def test_openai_prompt_uses_job_title_only(self) -> None:
         prompt = openai_title_vowel_prompt({"title": "Analyst", "description": "Engineer needed"})
 
@@ -95,6 +116,16 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(parse_match_response('{"hit": true, "reason": "Starts with E."}'), (True, "Starts with E."))
         with self.assertRaisesRegex(ValueError, "non-empty string 'reason'"):
             parse_match_response('{"hit": true, "reason": ""}')
+
+    def test_parse_triage_response_validates_candidate_ids(self) -> None:
+        parsed = parse_triage_response(
+            '{"candidates": [{"candidate_id": "1", "reason": "Strong overlap."}]}',
+            {"1", "2"},
+        )
+
+        self.assertEqual(parsed, [{"candidate_id": "1", "reason": "Strong overlap."}])
+        with self.assertRaisesRegex(ValueError, "unknown candidate_id"):
+            parse_triage_response('{"candidates": [{"candidate_id": "3", "reason": "Nope."}]}', {"1", "2"})
 
     def test_extract_response_text_reads_responses_output_shape(self) -> None:
         payload = {
@@ -186,6 +217,73 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decision["matcher"], "openai")
         self.assertEqual(decision["model"], "gpt-5.4-mini-test")
 
+    def test_openai_triage_posts_batched_request_without_network(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append((url, payload, headers))
+            return {
+                "model": "gpt-5.4-mini-test",
+                "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Worth confirmation."}]}',
+            }
+
+        triage = call_openai_unicorn_triage(
+            [
+                {"job_id": "1", "title": "Systems Lead"},
+                {"job_id": "2", "title": "Support Engineer"},
+            ],
+            "test-key",
+            "Candidate profile",
+            model="gpt-5.4-mini",
+            post_json=fake_post,
+        )
+
+        url, payload, headers = calls[0]
+        self.assertEqual(url, OPENAI_RESPONSES_URL)
+        self.assertEqual(payload["model"], "gpt-5.4-mini")
+        self.assertEqual(payload["text"]["format"]["name"], "job_unicorn_triage")
+        self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS)
+        self.assertIn('"candidate_id": "1"', payload["input"])
+        self.assertIn('"candidate_id": "2"', payload["input"])
+        self.assertEqual(headers["Authorization"], "Bearer test-key")
+        self.assertEqual(triage["candidates"], [{"candidate_id": "1", "reason": "Worth confirmation."}])
+        self.assertEqual(triage["model"], "gpt-5.4-mini-test")
+
+    def test_openai_two_stage_decisions_confirms_only_triage_candidates(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append(payload)
+            if payload["text"]["format"]["name"] == "job_unicorn_triage":
+                return {
+                    "model": "gpt-5.4-mini-test",
+                    "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Rare domain overlap."}]}',
+                }
+            return {
+                "model": "gpt-5.4-mini-test",
+                "output_text": '{"hit": true, "reason": "Confirmed rare fit."}',
+            }
+
+        decisions = openai_two_stage_decisions(
+            [
+                {"job_id": "1", "title": "Systems Lead", "description": "Regulated systems."},
+                {"job_id": "2", "title": "Support Engineer", "description": "Customer tickets."},
+            ],
+            "test-key",
+            "Candidate profile",
+            model="gpt-5.4-mini",
+            post_json=fake_post,
+        )
+
+        self.assertEqual([call["text"]["format"]["name"] for call in calls], ["job_unicorn_triage", "job_unicorn_match"])
+        self.assertEqual([decision["hit"] for decision in decisions], [True, False])
+        self.assertEqual(decisions[0]["stage"], "confirmation")
+        self.assertEqual(decisions[0]["triage_reason"], "Rare domain overlap.")
+        self.assertEqual(decisions[1]["stage"], "triage")
+        self.assertEqual(decisions[1]["reason"], "Rejected by first-stage OpenAI triage.")
+        self.assertEqual(decisions[0]["triage_candidate_count"], 1)
+        self.assertEqual(decisions[1]["triage_candidate_count"], 1)
+
     def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
         def fake_post(url, payload, headers):
             return {
@@ -237,6 +335,16 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decisions[0]["job_id"], "1")
         self.assertTrue(decisions[0]["hit"])
         self.assertEqual(decisions[0]["matcher"], "mock")
+
+    def test_split_jobs_from_decisions_requires_same_count(self) -> None:
+        jobs = [{"job_id": "1"}, {"job_id": "2"}]
+
+        hits, discards = split_jobs_from_decisions(jobs, [{"hit": True}, {"hit": False}])
+
+        self.assertEqual(hits, [{"job_id": "1"}])
+        self.assertEqual(discards, [{"job_id": "2"}])
+        with self.assertRaisesRegex(ValueError, "Decision count"):
+            split_jobs_from_decisions(jobs, [{"hit": True}])
 
     def test_timestamp_is_derived_from_discard_input_path(self) -> None:
         input_path = Path("results/discard/20260425_120000/linkedin_jobs_sample.json")
