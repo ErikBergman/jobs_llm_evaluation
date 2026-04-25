@@ -1,0 +1,145 @@
+name: Job Search
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules are UTC. These four runs are gated below so the job
+    # actually executes at 07:00 and 19:00 Europe/Stockholm across CET/CEST.
+    - cron: "0 5,6,17,18 * * *"
+
+concurrency:
+  group: job-search
+  cancel-in-progress: false
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    env:
+      JOB_SEARCH_LIMIT: ${{ vars.JOB_SEARCH_LIMIT || '10' }}
+      JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '10' }}
+      RUNTIME_RESULTS_DIR: runtime_results
+    steps:
+      - name: Check local schedule window
+        id: schedule_gate
+        shell: bash
+        run: |
+          local_hour="$(TZ=Europe/Stockholm date +%H)"
+          local_time="$(TZ=Europe/Stockholm date '+%Y-%m-%d %H:%M:%S %Z')"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$local_hour" == "07" || "$local_hour" == "19" ]]; then
+            echo "run_job=true" >> "$GITHUB_OUTPUT"
+            echo "Running job-search workflow at ${local_time}."
+          else
+            echo "run_job=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping job-search workflow at ${local_time}; waiting for 07:00 or 19:00 Europe/Stockholm."
+          fi
+
+      - name: Checkout
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install rclone
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        shell: bash
+        run: |
+          sudo -v
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure Koofr
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        env:
+          KOOFR_EMAIL: ${{ secrets.KOOFR_EMAIL }}
+          KOOFR_APP_PASSWORD: ${{ secrets.KOOFR_APP_PASSWORD }}
+          KOOFR_PATH: ${{ secrets.KOOFR_PATH }}
+        shell: bash
+        run: |
+          if [[ -z "$KOOFR_EMAIL" || -z "$KOOFR_APP_PASSWORD" || -z "$KOOFR_PATH" ]]; then
+            echo "Missing Koofr secrets. Expected KOOFR_EMAIL, KOOFR_APP_PASSWORD, and KOOFR_PATH."
+            exit 1
+          fi
+
+          mkdir -p ~/.config/rclone
+          obscured_password="$(rclone obscure "$KOOFR_APP_PASSWORD")"
+          printf '[koofr]\ntype = koofr\nprovider = koofr\nuser = %s\npassword = %s\n' \
+            "$KOOFR_EMAIL" "$obscured_password" > ~/.config/rclone/rclone.conf
+
+          rclone mkdir "koofr:${KOOFR_PATH}"
+
+      - name: Download result memory from Koofr
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        env:
+          KOOFR_PATH: ${{ secrets.KOOFR_PATH }}
+          RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
+        shell: bash
+        run: |
+          mkdir -p "${RUNTIME_RESULTS_DIR}/discard" "${RUNTIME_RESULTS_DIR}/hits"
+          rclone copy "koofr:${KOOFR_PATH}" "${RUNTIME_RESULTS_DIR}" --create-empty-src-dirs
+
+      - name: Run tests
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        run: |
+          python3 -m unittest
+          python3 -m py_compile linkedin_guest_jobs.py match_jobs.py
+
+      - name: Scrape new jobs
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        id: scrape
+        env:
+          RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
+          JOB_SEARCH_LIMIT: ${{ env.JOB_SEARCH_LIMIT }}
+          JOB_SEARCH_MAX_PAGES: ${{ env.JOB_SEARCH_MAX_PAGES }}
+        shell: bash
+        run: |
+          set +e
+          python3 linkedin_guest_jobs.py \
+            --results-root "${RUNTIME_RESULTS_DIR}" \
+            --limit "${JOB_SEARCH_LIMIT}" \
+            --max-pages "${JOB_SEARCH_MAX_PAGES}" \
+            --output linkedin_jobs_sample.json | tee scrape.log
+          scrape_status="${PIPESTATUS[0]}"
+          set -e
+
+          if [[ "$scrape_status" -ne 0 ]]; then
+            if grep -q "No new public job cards found" scrape.log; then
+              echo "new_jobs=false" >> "$GITHUB_OUTPUT"
+              echo "No new jobs found."
+              exit 0
+            fi
+            exit "$scrape_status"
+          fi
+
+          scrape_path="$(grep -m1 '^Wrote ' scrape.log | sed 's/^Wrote //')"
+          if [[ -z "$scrape_path" || ! -f "$scrape_path" ]]; then
+            echo "Scrape completed but no output JSON path was found."
+            exit 1
+          fi
+
+          echo "new_jobs=true" >> "$GITHUB_OUTPUT"
+          echo "scrape_path=${scrape_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Classify new jobs
+        if: steps.schedule_gate.outputs.run_job == 'true' && steps.scrape.outputs.new_jobs == 'true'
+        env:
+          RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
+          SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}
+        run: python3 match_jobs.py --input "$SCRAPE_PATH" --output-root "$RUNTIME_RESULTS_DIR"
+
+      - name: Upload result memory to Koofr
+        if: always() && steps.schedule_gate.outputs.run_job == 'true'
+        env:
+          KOOFR_PATH: ${{ secrets.KOOFR_PATH }}
+          RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
+        shell: bash
+        run: |
+          if [[ ! -d "$RUNTIME_RESULTS_DIR" ]]; then
+            echo "Skipping Koofr upload: ${RUNTIME_RESULTS_DIR} does not exist."
+            exit 0
+          fi
+
+          rclone copy "$RUNTIME_RESULTS_DIR" "koofr:${KOOFR_PATH}" --create-empty-src-dirs
