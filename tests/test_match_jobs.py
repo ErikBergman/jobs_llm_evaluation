@@ -6,7 +6,8 @@ from pathlib import Path
 from match_jobs import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
-    DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
+    OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
+    OPENAI_TRIAGE_MIN_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
@@ -34,6 +35,7 @@ from match_jobs import (
     split_jobs_with_decisions,
     summarize_response_shape,
     timestamp_from_input,
+    triage_max_output_tokens,
 )
 
 
@@ -69,6 +71,12 @@ class MockMatcherTests(unittest.TestCase):
         self.assertNotEqual(cache_key, profile_cache_key("Different profile"))
         self.assertTrue(cache_key.startswith("job-profile:"))
         self.assertNotIn("Candidate", cache_key)
+
+    def test_triage_max_output_tokens_scales_with_job_count(self) -> None:
+        self.assertEqual(triage_max_output_tokens(0), OPENAI_TRIAGE_MIN_OUTPUT_TOKENS)
+        self.assertEqual(triage_max_output_tokens(1), OPENAI_TRIAGE_MIN_OUTPUT_TOKENS)
+        self.assertEqual(triage_max_output_tokens(5), 560)
+        self.assertEqual(triage_max_output_tokens(100), OPENAI_TRIAGE_MAX_OUTPUT_TOKENS)
 
     def test_rtf_to_text_ignores_rtf_metadata(self) -> None:
         profile = r"{\rtf1{\fonttbl{\f0 Helvetica;}}{\info{\title Hidden}}{\*\generator Hidden;}Visible\line Text}"
@@ -267,7 +275,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(url, OPENAI_RESPONSES_URL)
         self.assertEqual(payload["model"], "gpt-5.4-mini")
         self.assertEqual(payload["text"]["format"]["name"], "job_unicorn_triage")
-        self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS)
+        self.assertEqual(payload["max_output_tokens"], triage_max_output_tokens(2))
         self.assertNotIn("prompt_cache_key", payload)
         self.assertIn('"candidate_id": "1"', payload["input"])
         self.assertIn('"candidate_id": "2"', payload["input"])

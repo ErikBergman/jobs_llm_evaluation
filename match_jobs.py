@@ -20,8 +20,11 @@ ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
-DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS = 2048
+DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 256
+OPENAI_TRIAGE_BASE_OUTPUT_TOKENS = 160
+OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 80
+OPENAI_TRIAGE_MIN_OUTPUT_TOKENS = 256
+OPENAI_TRIAGE_MAX_OUTPUT_TOKENS = 1024
 DEFAULT_JOB_PROFILE_PATH = Path("job_profile.txt")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 RTF_DESTINATIONS = {
@@ -165,6 +168,11 @@ def load_job_profile(profile_path: Path) -> str:
 def profile_cache_key(profile: str) -> str:
     profile_hash = hashlib.sha256(profile.encode("utf-8")).hexdigest()[:16]
     return f"job-profile:{profile_hash}"
+
+
+def triage_max_output_tokens(job_count: int) -> int:
+    scaled_limit = OPENAI_TRIAGE_BASE_OUTPUT_TOKENS + max(job_count, 0) * OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB
+    return min(OPENAI_TRIAGE_MAX_OUTPUT_TOKENS, max(OPENAI_TRIAGE_MIN_OUTPUT_TOKENS, scaled_limit))
 
 
 def job_ad_text(job: dict[str, Any]) -> str:
@@ -511,7 +519,7 @@ def call_openai_unicorn_triage(
         "job_unicorn_triage",
         triage_schema(),
         model=model,
-        max_output_tokens=DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
+        max_output_tokens=triage_max_output_tokens(len(jobs)),
         prompt_cache_key=prompt_cache_key,
         post_json=post_json,
     )
