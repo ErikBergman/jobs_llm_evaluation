@@ -35,6 +35,7 @@ class MockMatcherTests(unittest.TestCase):
     def test_openai_prompt_uses_job_title_only(self) -> None:
         prompt = openai_title_vowel_prompt({"title": "Analyst", "description": "Engineer needed"})
 
+        self.assertIn("Return JSON only", prompt)
         self.assertIn("Job title: Analyst", prompt)
         self.assertNotIn("Engineer needed", prompt)
 
@@ -100,6 +101,8 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(url, OPENAI_RESPONSES_URL)
         self.assertEqual(payload["model"], DEFAULT_OPENAI_MODEL)
         self.assertIn("Job title: Engineer", payload["input"])
+        self.assertEqual(payload["reasoning"], {"effort": "minimal"})
+        self.assertEqual(payload["text"]["verbosity"], "low")
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
         self.assertEqual(headers["Authorization"], "Bearer test-key")

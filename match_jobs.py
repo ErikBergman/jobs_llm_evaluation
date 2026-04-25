@@ -18,7 +18,7 @@ ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5-nano"
-DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 80
+DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
@@ -34,9 +34,8 @@ def openai_title_vowel_prompt(job: dict[str, Any]) -> str:
     if not isinstance(title, str):
         title = ""
     return (
-        "Determine whether this job title starts with a vowel. "
-        "If the first letter of the title is A, E, I, O, or U, return hit=true. "
-        "Otherwise return hit=false.\n\n"
+        "Return JSON only. Set hit=true if the first letter of the job title is A, E, I, O, or U. "
+        "Otherwise set hit=false.\n\n"
         f"Job title: {title}"
     )
 
@@ -99,7 +98,9 @@ def call_openai_title_vowel_matcher(
     payload = {
         "model": model,
         "input": openai_title_vowel_prompt(job),
+        "reasoning": {"effort": "minimal"},
         "text": {
+            "verbosity": "low",
             "format": {
                 "type": "json_schema",
                 "name": "job_title_vowel_match",
