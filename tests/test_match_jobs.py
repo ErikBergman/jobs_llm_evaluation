@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from match_jobs import classify_file, is_mock_hit, timestamp_from_input
+from match_jobs import classify_file, input_from_latest, is_mock_hit, latest_discard_run, timestamp_from_input
 
 
 class MockMatcherTests(unittest.TestCase):
@@ -43,6 +43,44 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(discards_path, root / "results" / "discard" / "20260425_120000" / "jobs_discard.json")
         self.assertEqual([job["job_id"] for job in hits], ["1"])
         self.assertEqual([job["job_id"] for job in discards], ["2", "3"])
+
+    def test_latest_discard_run_selects_newest_timestamp_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            (root / "discard" / "20260425_120000").mkdir(parents=True)
+            (root / "discard" / "20260425_130000").mkdir()
+
+            self.assertEqual(latest_discard_run(root), root / "discard" / "20260425_130000")
+
+    def test_input_from_latest_selects_json_in_newest_timestamp_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            older = root / "discard" / "20260425_120000"
+            newer = root / "discard" / "20260425_130000"
+            older.mkdir(parents=True)
+            newer.mkdir()
+            (older / "older.json").write_text("[]", encoding="utf-8")
+            (newer / "newer.json").write_text("[]", encoding="utf-8")
+            (newer / "newer_discard.json").write_text("[]", encoding="utf-8")
+
+            self.assertEqual(input_from_latest(root), newer / "newer.json")
+
+    def test_latest_discard_run_errors_when_no_runs_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "No discard runs"):
+                latest_discard_run(Path(temp_dir) / "results")
+
+    def test_input_from_latest_errors_on_ambiguous_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            latest = root / "discard" / "20260425_130000"
+            latest.mkdir(parents=True)
+            (latest / "one.json").write_text("[]", encoding="utf-8")
+            (latest / "two.json").write_text("[]", encoding="utf-8")
+            (latest / "one_hits.json").write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "Multiple unclassified"):
+                input_from_latest(root)
 
 
 if __name__ == "__main__":

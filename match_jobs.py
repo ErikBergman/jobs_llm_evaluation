@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -71,14 +72,46 @@ def classify_file(input_path: Path, output_root: Path, timestamp: str | None = N
     return hits_path, discards_path
 
 
+def is_unclassified_jobs_json(path: Path) -> bool:
+    return path.suffix == ".json" and not path.name.endswith(("_hits.json", "_discard.json"))
+
+
+def latest_discard_run(output_root: Path) -> Path:
+    discard_root = output_root / "discard"
+    if not discard_root.exists():
+        raise ValueError(f"No discard runs found under {discard_root}")
+    runs = sorted((path for path in discard_root.iterdir() if path.is_dir()), key=lambda path: path.name)
+    if not runs:
+        raise ValueError(f"No discard runs found under {discard_root}")
+    return runs[-1]
+
+
+def input_from_latest(output_root: Path) -> Path:
+    latest_run = latest_discard_run(output_root)
+    candidates = sorted(path for path in latest_run.iterdir() if path.is_file() and is_unclassified_jobs_json(path))
+    if not candidates:
+        raise ValueError(f"No unclassified jobs JSON found in {latest_run}")
+    if len(candidates) > 1:
+        names = ", ".join(path.name for path in candidates)
+        raise ValueError(f"Multiple unclassified jobs JSON files found in {latest_run}: {names}")
+    return candidates[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, required=True, help="Scraped jobs JSON file")
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--input", type=Path, help="Scraped jobs JSON file")
+    input_group.add_argument("--latest", action="store_true", help="Use the newest results/discard/<timestamp>/ scrape")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT, help="Results root directory")
     parser.add_argument("--timestamp", help="Result timestamp folder name")
     args = parser.parse_args()
 
-    hits_path, discards_path = classify_file(args.input, args.output_root, args.timestamp)
+    try:
+        input_path = input_from_latest(args.output_root) if args.latest else args.input
+        hits_path, discards_path = classify_file(input_path, args.output_root, args.timestamp)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     print(f"Wrote {hits_path}")
     print(f"Wrote {discards_path}")
     return 0
