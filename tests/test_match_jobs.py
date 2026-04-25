@@ -219,7 +219,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(url, OPENAI_RESPONSES_URL)
         self.assertEqual(payload["model"], DEFAULT_OPENAI_MODEL)
         self.assertIn("Job title: Engineer", payload["input"])
-        self.assertEqual(payload["reasoning"], {"effort": "minimal"})
+        self.assertEqual(payload["reasoning"], {"effort": "medium"})
         self.assertEqual(payload["text"]["verbosity"], "low")
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
         self.assertEqual(set(payload["text"]["format"]["schema"]["required"]), {"hit", "reason"})
