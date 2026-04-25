@@ -9,15 +9,19 @@ from match_jobs import (
     OPENAI_RESPONSES_URL,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
+    call_openai_unicorn_decision,
     classify_file,
     extract_response_text,
     input_from_latest,
     is_mock_hit,
     latest_discard_run,
+    load_job_profile,
     mock_match_decision,
     openai_title_vowel_prompt,
+    openai_unicorn_prompt,
     parse_match_response,
     parse_hit_response,
+    rtf_to_text,
     split_jobs,
     split_jobs_with_decisions,
     summarize_response_shape,
@@ -35,6 +39,44 @@ class MockMatcherTests(unittest.TestCase):
     def test_missing_or_empty_description_is_discard(self) -> None:
         self.assertFalse(is_mock_hit({}))
         self.assertFalse(is_mock_hit({"description": ""}))
+
+    def test_load_job_profile_reads_plain_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = Path(temp_dir) / "profile.txt"
+            profile_path.write_text("Candidate profile", encoding="utf-8")
+
+            self.assertEqual(load_job_profile(profile_path), "Candidate profile")
+
+    def test_load_job_profile_extracts_rtf_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = Path(temp_dir) / "profile.rtf"
+            profile_path.write_text(r"{\rtf1 Candidate\par Profile with \u246?}", encoding="utf-8")
+
+            self.assertEqual(load_job_profile(profile_path), "Candidate\nProfile with ö")
+
+    def test_rtf_to_text_ignores_rtf_metadata(self) -> None:
+        profile = r"{\rtf1{\fonttbl{\f0 Helvetica;}}{\info{\title Hidden}}{\*\generator Hidden;}Visible\line Text}"
+
+        self.assertEqual(rtf_to_text(profile).strip(), "Visible\nText")
+
+    def test_openai_unicorn_prompt_uses_profile_and_full_job_ad(self) -> None:
+        prompt = openai_unicorn_prompt(
+            {
+                "title": "Principal Safety Engineer",
+                "company": "Example AB",
+                "location": "Lund",
+                "description": "Build regulated medical devices.",
+            },
+            "Candidate has regulated medical device and product leadership experience.",
+        )
+
+        self.assertIn("rare 'unicorn' match", prompt)
+        self.assertIn("Prefer false unless the fit is unusually strong", prompt)
+        self.assertIn("Candidate has regulated medical device", prompt)
+        self.assertIn("Title: Principal Safety Engineer", prompt)
+        self.assertIn("Company: Example AB", prompt)
+        self.assertIn("Location: Lund", prompt)
+        self.assertIn("Description: Build regulated medical devices.", prompt)
 
     def test_openai_prompt_uses_job_title_only(self) -> None:
         prompt = openai_title_vowel_prompt({"title": "Analyst", "description": "Engineer needed"})
@@ -116,6 +158,33 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(set(payload["text"]["format"]["schema"]["required"]), {"hit", "reason"})
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_openai_unicorn_decision_posts_profile_based_request_without_network(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append((url, payload, headers))
+            return {"model": "gpt-5.4-mini-test", "output_text": '{"hit": true, "reason": "Rare overlap."}'}
+
+        decision = call_openai_unicorn_decision(
+            {"job_id": "1", "title": "Systems Lead", "description": "Own regulated product strategy."},
+            "test-key",
+            "Candidate profile: regulated products plus systems leadership.",
+            model="gpt-5.4-mini",
+            post_json=fake_post,
+        )
+
+        url, payload, headers = calls[0]
+        self.assertEqual(url, OPENAI_RESPONSES_URL)
+        self.assertEqual(payload["model"], "gpt-5.4-mini")
+        self.assertIn("Candidate profile: regulated products", payload["input"])
+        self.assertIn("Title: Systems Lead", payload["input"])
+        self.assertEqual(payload["text"]["format"]["name"], "job_unicorn_match")
+        self.assertEqual(headers["Authorization"], "Bearer test-key")
+        self.assertTrue(decision["hit"])
+        self.assertEqual(decision["reason"], "Rare overlap.")
+        self.assertEqual(decision["matcher"], "openai")
+        self.assertEqual(decision["model"], "gpt-5.4-mini-test")
 
     def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
         def fake_post(url, payload, headers):

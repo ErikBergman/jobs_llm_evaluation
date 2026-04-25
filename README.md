@@ -1,6 +1,6 @@
 # jobs_llm_evaluation
 
-Scrape public LinkedIn job ads, store each scrape under `results/discard/<timestamp>/`, then run a mock matcher that separates likely matches into `results/hits/<timestamp>/`.
+Scrape public LinkedIn job ads, store each scrape under `results/discard/<timestamp>/`, then run a matcher that separates likely matches into `results/hits/<timestamp>/`.
 
 ## Scrape jobs
 
@@ -32,23 +32,26 @@ Rejected jobs are written back under:
 results/discard/<timestamp>/
 ```
 
-## OpenAI matcher PoC
+## OpenAI profile matcher
 
-The matcher also has an OpenAI PoC mode using `gpt-5-nano`. It is intentionally not the default, because every API call costs money.
+The matcher also has an OpenAI mode. It is intentionally not the default, because every API call costs money.
 
-For this first PoC, the prompt only checks whether the job title starts with a vowel. If yes, the job is a hit. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
+OpenAI mode asks the model whether the job is a rare "unicorn" match for the candidate profile. It should only put a small fraction of unusually strong matches in `hits`; generic keyword overlap should stay in `discard`. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
 
 Local usage:
 
 ```bash
-OPENAI_API_KEY=... python3 match_jobs.py --latest --matcher openai
+OPENAI_API_KEY=... python3 match_jobs.py --latest --matcher openai --job-profile job_profile.txt
 ```
+
+The profile file may be plain text or RTF. Local profile files named `job_profile.txt` or `job_profile.rtf` are ignored by git.
 
 GitHub Actions usage:
 
 - add repository secret `OPENAI_API_KEY`
 - add repository variable `JOB_MATCHER_MODE=openai`
-- optionally add repository variable `OPENAI_MODEL=gpt-5-nano`
+- optionally add repository variable `OPENAI_MODEL=gpt-5.4-mini`
+- keep `job_profile.rtf` in the configured Koofr memory folder
 
 If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.
 

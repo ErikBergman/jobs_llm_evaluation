@@ -18,7 +18,7 @@ jobs:
       ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '10' }}
       JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '10' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
-      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
       RUNTIME_RESULTS_DIR: runtime_results
     steps:
       - name: Check local schedule window
@@ -133,9 +133,14 @@ jobs:
           JOB_MATCHER_MODE: ${{ env.JOB_MATCHER_MODE }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JOB_PROFILE_PATH: ${{ env.RUNTIME_RESULTS_DIR }}/job_profile.rtf
         run: |
           if [[ "$JOB_MATCHER_MODE" == "openai" && -z "$OPENAI_API_KEY" ]]; then
             echo "OPENAI_API_KEY is required when JOB_MATCHER_MODE=openai."
+            exit 1
+          fi
+          if [[ "$JOB_MATCHER_MODE" == "openai" && ! -f "$JOB_PROFILE_PATH" ]]; then
+            echo "Job profile file is required when JOB_MATCHER_MODE=openai: ${JOB_PROFILE_PATH}"
             exit 1
           fi
 
@@ -143,7 +148,8 @@ jobs:
             --input "$SCRAPE_PATH" \
             --output-root "$RUNTIME_RESULTS_DIR" \
             --matcher "$JOB_MATCHER_MODE" \
-            --openai-model "$OPENAI_MODEL"
+            --openai-model "$OPENAI_MODEL" \
+            --job-profile "$JOB_PROFILE_PATH"
 
       - name: Upload result memory to Koofr
         if: always() && steps.schedule_gate.outputs.run_job == 'true'

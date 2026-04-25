@@ -159,6 +159,12 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# Generated job-search data and private local profile files
+results/
+runtime_results/
+job_profile.txt
+job_profile.rtf
+
 # Pyre type checker
 .pyre/
 

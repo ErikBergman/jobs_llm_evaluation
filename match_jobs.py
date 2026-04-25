@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify scraped job ads with a mock CV matcher."""
+"""Classify scraped job ads with a mock or OpenAI-backed matcher."""
 
 from __future__ import annotations
 
@@ -18,9 +18,22 @@ from urllib.request import Request, urlopen
 ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
-DEFAULT_OPENAI_MODEL = "gpt-5-nano"
+DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
+DEFAULT_JOB_PROFILE_PATH = Path("job_profile.txt")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+RTF_DESTINATIONS = {
+    "fonttbl",
+    "colortbl",
+    "datastore",
+    "stylesheet",
+    "info",
+    "pict",
+    "object",
+    "header",
+    "footer",
+    "footnote",
+}
 
 
 def is_mock_hit(job: dict[str, Any]) -> bool:
@@ -28,6 +41,148 @@ def is_mock_hit(job: dict[str, Any]) -> bool:
     if not isinstance(description, str):
         return False
     return bool(ENGINEER_WORD.search(description))
+
+
+def rtf_to_text(rtf: str) -> str:
+    output: list[str] = []
+    ignored_groups = [False]
+    pending_ignorable_destination = False
+    unicode_skip_count = 1
+    chars_to_skip = 0
+    index = 0
+
+    while index < len(rtf):
+        char = rtf[index]
+        if chars_to_skip:
+            chars_to_skip -= 1
+            index += 1
+            continue
+
+        if char == "{":
+            ignored_groups.append(ignored_groups[-1])
+            pending_ignorable_destination = False
+            index += 1
+            continue
+        if char == "}":
+            if len(ignored_groups) > 1:
+                ignored_groups.pop()
+            pending_ignorable_destination = False
+            index += 1
+            continue
+        if char != "\\":
+            if not ignored_groups[-1]:
+                output.append(char)
+            index += 1
+            continue
+
+        index += 1
+        if index >= len(rtf):
+            break
+
+        escaped = rtf[index]
+        if escaped in "\\{}":
+            if not ignored_groups[-1]:
+                output.append(escaped)
+            index += 1
+            continue
+        if escaped == "'":
+            hex_value = rtf[index + 1:index + 3]
+            if len(hex_value) == 2:
+                try:
+                    if not ignored_groups[-1]:
+                        output.append(bytes.fromhex(hex_value).decode("latin-1"))
+                    index += 3
+                    continue
+                except ValueError:
+                    pass
+        if escaped == "~":
+            if not ignored_groups[-1]:
+                output.append(" ")
+            index += 1
+            continue
+        if escaped in "-_":
+            index += 1
+            continue
+        if escaped == "*":
+            ignored_groups[-1] = True
+            pending_ignorable_destination = True
+            index += 1
+            continue
+        if not escaped.isalpha():
+            index += 1
+            continue
+
+        word_start = index
+        while index < len(rtf) and rtf[index].isalpha():
+            index += 1
+        word = rtf[word_start:index]
+        sign = 1
+        if index < len(rtf) and rtf[index] == "-":
+            sign = -1
+            index += 1
+        number_start = index
+        while index < len(rtf) and rtf[index].isdigit():
+            index += 1
+        number = rtf[number_start:index]
+        numeric_value = sign * int(number) if number else None
+        if index < len(rtf) and rtf[index] == " ":
+            index += 1
+
+        if pending_ignorable_destination or word in RTF_DESTINATIONS:
+            ignored_groups[-1] = True
+            pending_ignorable_destination = False
+            continue
+        pending_ignorable_destination = False
+
+        if ignored_groups[-1]:
+            continue
+        if word in ("par", "line"):
+            output.append("\n")
+        elif word == "tab":
+            output.append("\t")
+        elif word == "uc" and numeric_value is not None:
+            unicode_skip_count = max(numeric_value, 0)
+        elif word == "u" and numeric_value is not None:
+            output.append(chr(numeric_value if numeric_value >= 0 else numeric_value + 65536))
+            chars_to_skip = unicode_skip_count
+
+    return "".join(output)
+
+
+def load_job_profile(profile_path: Path) -> str:
+    if not profile_path.exists():
+        raise ValueError(f"Job profile not found: {profile_path}")
+    with open(profile_path, encoding="utf-8") as profile_file:
+        raw_profile = profile_file.read()
+    profile = rtf_to_text(raw_profile).strip() if raw_profile.lstrip().startswith("{\\rtf") else raw_profile.strip()
+    if not profile:
+        raise ValueError(f"{profile_path} is empty")
+    return profile
+
+
+def job_ad_text(job: dict[str, Any]) -> str:
+    fields = [
+        ("Title", job.get("title", "")),
+        ("Company", job.get("company", "")),
+        ("Location", job.get("location", "")),
+        ("Description", job.get("description", "")),
+    ]
+    return "\n".join(f"{label}: {value}" for label, value in fields if isinstance(value, str) and value.strip())
+
+
+def openai_unicorn_prompt(job: dict[str, Any], profile: str) -> str:
+    return (
+        "You are a strict job-match classifier. Determine whether the job ad is a rare 'unicorn' match "
+        "for the candidate profile. A unicorn match should be a small fraction of jobs, only when the ad "
+        "strongly combines several of the candidate's distinctive strengths, background, and preferences. "
+        "Do not mark a job as a hit merely because it contains one matching keyword, a generic engineering title, "
+        "or one isolated overlap. Prefer false unless the fit is unusually strong.\n\n"
+        "Return JSON only with:\n"
+        "- hit: boolean\n"
+        "- reason: one concise sentence explaining the decision\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        f"Job ad:\n{job_ad_text(job)}"
+    )
 
 
 def openai_title_vowel_prompt(job: dict[str, Any]) -> str:
@@ -118,9 +273,11 @@ def mock_match_decision(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def call_openai_title_vowel_decision(
+def call_openai_match_decision(
     job: dict[str, Any],
     api_key: str,
+    prompt: str,
+    schema_name: str,
     model: str = DEFAULT_OPENAI_MODEL,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -129,13 +286,13 @@ def call_openai_title_vowel_decision(
 
     payload = {
         "model": model,
-        "input": openai_title_vowel_prompt(job),
+        "input": prompt,
         "reasoning": {"effort": "minimal"},
         "text": {
             "verbosity": "low",
             "format": {
                 "type": "json_schema",
-                "name": "job_title_vowel_match",
+                "name": schema_name,
                 "strict": True,
                 "schema": {
                     "type": "object",
@@ -168,6 +325,39 @@ def call_openai_title_vowel_decision(
         "model": response_payload.get("model", model),
         "raw_response": response_text,
     }
+
+
+def call_openai_unicorn_decision(
+    job: dict[str, Any],
+    api_key: str,
+    profile: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return call_openai_match_decision(
+        job,
+        api_key,
+        openai_unicorn_prompt(job, profile),
+        "job_unicorn_match",
+        model=model,
+        post_json=post_json,
+    )
+
+
+def call_openai_title_vowel_decision(
+    job: dict[str, Any],
+    api_key: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return call_openai_match_decision(
+        job,
+        api_key,
+        openai_title_vowel_prompt(job),
+        "job_title_vowel_match",
+        model=model,
+        post_json=post_json,
+    )
 
 
 def call_openai_title_vowel_matcher(
@@ -264,12 +454,18 @@ def write_object_json(path: Path, payload: dict[str, Any]) -> None:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
 
-def decisioner_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def decisioner_from_args(
+    matcher_name: str,
+    api_key: str | None,
+    model: str,
+    profile_path: Path = DEFAULT_JOB_PROFILE_PATH,
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
     if matcher_name == "mock":
         return mock_match_decision
     if matcher_name == "openai":
         resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-        return lambda job: call_openai_title_vowel_decision(job, resolved_api_key, model=model)
+        profile = load_job_profile(profile_path)
+        return lambda job: call_openai_unicorn_decision(job, resolved_api_key, profile, model=model)
     raise ValueError(f"Unsupported matcher: {matcher_name}")
 
 
@@ -341,11 +537,17 @@ def main() -> int:
     parser.add_argument("--timestamp", help="Result timestamp folder name")
     parser.add_argument("--matcher", choices=("mock", "openai"), default=DEFAULT_MATCHER, help="Matcher backend")
     parser.add_argument("--openai-model", default=DEFAULT_OPENAI_MODEL, help="OpenAI model for --matcher openai")
+    parser.add_argument("--job-profile", type=Path, default=DEFAULT_JOB_PROFILE_PATH, help="Candidate profile text file")
     args = parser.parse_args()
 
     try:
         input_path = input_from_latest(args.output_root) if args.latest else args.input
-        decisioner = decisioner_from_args(args.matcher, os.environ.get("OPENAI_API_KEY"), args.openai_model)
+        decisioner = decisioner_from_args(
+            args.matcher,
+            os.environ.get("OPENAI_API_KEY"),
+            args.openai_model,
+            profile_path=args.job_profile,
+        )
         hits_path, discards_path, metadata_path, metadata = classify_file(
             input_path,
             args.output_root,
