@@ -7,15 +7,19 @@ from match_jobs import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
+    call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
     classify_file,
     extract_response_text,
     input_from_latest,
     is_mock_hit,
     latest_discard_run,
+    mock_match_decision,
     openai_title_vowel_prompt,
+    parse_match_response,
     parse_hit_response,
     split_jobs,
+    split_jobs_with_decisions,
     summarize_response_shape,
     timestamp_from_input,
 )
@@ -44,6 +48,11 @@ class MockMatcherTests(unittest.TestCase):
         self.assertFalse(parse_hit_response('{"hit": false}'))
         with self.assertRaisesRegex(ValueError, "boolean 'hit'"):
             parse_hit_response('{"hit": "true"}')
+
+    def test_parse_match_response_requires_reason(self) -> None:
+        self.assertEqual(parse_match_response('{"hit": true, "reason": "Starts with E."}'), (True, "Starts with E."))
+        with self.assertRaisesRegex(ValueError, "non-empty string 'reason'"):
+            parse_match_response('{"hit": true, "reason": ""}')
 
     def test_extract_response_text_reads_responses_output_shape(self) -> None:
         payload = {
@@ -93,7 +102,7 @@ class MockMatcherTests(unittest.TestCase):
 
         def fake_post(url, payload, headers):
             calls.append((url, payload, headers))
-            return {"output_text": '{"hit": true}'}
+            return {"output_text": '{"hit": true, "reason": "Starts with E."}'}
 
         self.assertTrue(call_openai_title_vowel_matcher({"title": "Engineer"}, "test-key", post_json=fake_post))
 
@@ -104,8 +113,35 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(payload["reasoning"], {"effort": "minimal"})
         self.assertEqual(payload["text"]["verbosity"], "low")
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
+        self.assertEqual(set(payload["text"]["format"]["schema"]["required"]), {"hit", "reason"})
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
+        def fake_post(url, payload, headers):
+            return {
+                "model": "gpt-5-nano-test",
+                "output_text": '{"hit": false, "reason": "Starts with S."}',
+            }
+
+        decision = call_openai_title_vowel_decision(
+            {"job_id": "1", "title": "Software Engineer"},
+            "test-key",
+            post_json=fake_post,
+        )
+
+        self.assertEqual(
+            decision,
+            {
+                "job_id": "1",
+                "title": "Software Engineer",
+                "hit": False,
+                "reason": "Starts with S.",
+                "matcher": "openai",
+                "model": "gpt-5-nano-test",
+                "raw_response": '{"hit": false, "reason": "Starts with S."}',
+            },
+        )
 
     def test_openai_matcher_errors_with_response_shape_when_no_text(self) -> None:
         def fake_post(url, payload, headers):
@@ -121,6 +157,17 @@ class MockMatcherTests(unittest.TestCase):
 
         self.assertEqual(hits, [{"title": "Analyst"}])
         self.assertEqual(discards, [{"title": "Engineer"}])
+
+    def test_split_jobs_with_decisions_returns_audit_data(self) -> None:
+        jobs = [{"job_id": "1", "title": "Analyst", "description": "Engineer needed"}]
+
+        hits, discards, decisions = split_jobs_with_decisions(jobs, decisioner=mock_match_decision)
+
+        self.assertEqual(hits, jobs)
+        self.assertEqual(discards, [])
+        self.assertEqual(decisions[0]["job_id"], "1")
+        self.assertTrue(decisions[0]["hit"])
+        self.assertEqual(decisions[0]["matcher"], "mock")
 
     def test_timestamp_is_derived_from_discard_input_path(self) -> None:
         input_path = Path("results/discard/20260425_120000/linkedin_jobs_sample.json")
@@ -144,15 +191,20 @@ class MockMatcherTests(unittest.TestCase):
             input_path.parent.mkdir(parents=True)
             input_path.write_text(json.dumps(jobs), encoding="utf-8")
 
-            hits_path, discards_path = classify_file(input_path, root / "results")
+            hits_path, discards_path, metadata_path, metadata = classify_file(input_path, root / "results")
 
             hits = json.loads(hits_path.read_text(encoding="utf-8"))
             discards = json.loads(discards_path.read_text(encoding="utf-8"))
+            metadata_json = json.loads(metadata_path.read_text(encoding="utf-8"))
 
         self.assertEqual(hits_path, root / "results" / "hits" / "20260425_120000" / "jobs_hits.json")
         self.assertEqual(discards_path, root / "results" / "discard" / "20260425_120000" / "jobs_discard.json")
+        self.assertEqual(metadata_path, root / "results" / "discard" / "20260425_120000" / "jobs_match_metadata.json")
         self.assertEqual([job["job_id"] for job in hits], ["1"])
         self.assertEqual([job["job_id"] for job in discards], ["2", "3"])
+        self.assertEqual(metadata["hits_count"], 1)
+        self.assertEqual(metadata_json["discards_count"], 2)
+        self.assertEqual([decision["job_id"] for decision in metadata_json["decisions"]], ["1", "2", "3"])
 
     def test_latest_discard_run_selects_newest_timestamp_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -172,6 +224,7 @@ class MockMatcherTests(unittest.TestCase):
             (older / "older.json").write_text("[]", encoding="utf-8")
             (newer / "newer.json").write_text("[]", encoding="utf-8")
             (newer / "newer_discard.json").write_text("[]", encoding="utf-8")
+            (newer / "newer_match_metadata.json").write_text("{}", encoding="utf-8")
 
             self.assertEqual(input_from_latest(root), newer / "newer.json")
 

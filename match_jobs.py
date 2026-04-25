@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -35,7 +36,7 @@ def openai_title_vowel_prompt(job: dict[str, Any]) -> str:
         title = ""
     return (
         "Return JSON only. Set hit=true if the first letter of the job title is A, E, I, O, or U. "
-        "Otherwise set hit=false.\n\n"
+        "Otherwise set hit=false. Also return a short reason explaining the decision in one sentence.\n\n"
         f"Job title: {title}"
     )
 
@@ -74,6 +75,22 @@ def summarize_response_shape(response_payload: dict[str, Any]) -> str:
     return json.dumps(summary, ensure_ascii=False)
 
 
+def parse_match_response(response_text: str) -> tuple[bool, str]:
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"OpenAI response was not valid JSON: {response_text!r}") from error
+
+    hit = payload.get("hit")
+    if not isinstance(hit, bool):
+        raise ValueError(f"OpenAI response JSON must contain boolean 'hit': {response_text!r}")
+
+    reason = payload.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"OpenAI response JSON must contain non-empty string 'reason': {response_text!r}")
+    return hit, reason.strip()
+
+
 def parse_hit_response(response_text: str) -> bool:
     try:
         payload = json.loads(response_text)
@@ -86,12 +103,27 @@ def parse_hit_response(response_text: str) -> bool:
     return hit
 
 
-def call_openai_title_vowel_matcher(
+def mock_match_decision(job: dict[str, Any]) -> dict[str, Any]:
+    hit = is_mock_hit(job)
+    return {
+        "job_id": job.get("job_id"),
+        "title": job.get("title"),
+        "hit": hit,
+        "reason": (
+            "Description contains the standalone word 'engineer'."
+            if hit
+            else "Description does not contain the standalone word 'engineer'."
+        ),
+        "matcher": "mock",
+    }
+
+
+def call_openai_title_vowel_decision(
     job: dict[str, Any],
     api_key: str,
     model: str = DEFAULT_OPENAI_MODEL,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
-) -> bool:
+) -> dict[str, Any]:
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required when --matcher openai is used")
 
@@ -110,8 +142,9 @@ def call_openai_title_vowel_matcher(
                     "additionalProperties": False,
                     "properties": {
                         "hit": {"type": "boolean"},
+                        "reason": {"type": "string"},
                     },
-                    "required": ["hit"],
+                    "required": ["hit", "reason"],
                 },
             }
         },
@@ -125,7 +158,25 @@ def call_openai_title_vowel_matcher(
     response_text = extract_response_text(response_payload)
     if not response_text:
         raise ValueError(f"OpenAI response did not include output text: {summarize_response_shape(response_payload)}")
-    return parse_hit_response(response_text)
+    hit, reason = parse_match_response(response_text)
+    return {
+        "job_id": job.get("job_id"),
+        "title": job.get("title"),
+        "hit": hit,
+        "reason": reason,
+        "matcher": "openai",
+        "model": response_payload.get("model", model),
+        "raw_response": response_text,
+    }
+
+
+def call_openai_title_vowel_matcher(
+    job: dict[str, Any],
+    api_key: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> bool:
+    return bool(call_openai_title_vowel_decision(job, api_key, model=model, post_json=post_json)["hit"])
 
 
 def post_json_to_api(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
@@ -167,6 +218,23 @@ def split_jobs(
     return hits, discards
 
 
+def split_jobs_with_decisions(
+    jobs: list[dict[str, Any]],
+    decisioner: Callable[[dict[str, Any]], dict[str, Any]] = mock_match_decision,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    hits: list[dict[str, Any]] = []
+    discards: list[dict[str, Any]] = []
+    decisions: list[dict[str, Any]] = []
+    for job in jobs:
+        decision = decisioner(job)
+        decisions.append(decision)
+        if decision["hit"]:
+            hits.append(job)
+        else:
+            discards.append(job)
+    return hits, discards, decisions
+
+
 def timestamp_from_input(input_path: Path) -> str:
     parts = input_path.parts
     for index in range(len(parts) - 1):
@@ -175,11 +243,12 @@ def timestamp_from_input(input_path: Path) -> str:
     raise ValueError("--timestamp is required unless --input is under <output-root>/discard/<timestamp>/")
 
 
-def output_paths(input_path: Path, output_root: Path, timestamp: str) -> tuple[Path, Path]:
+def output_paths(input_path: Path, output_root: Path, timestamp: str) -> tuple[Path, Path, Path]:
     stem = input_path.stem
     return (
         output_root / "hits" / timestamp / f"{stem}_hits.json",
         output_root / "discard" / timestamp / f"{stem}_discard.json",
+        output_root / "discard" / timestamp / f"{stem}_match_metadata.json",
     )
 
 
@@ -189,31 +258,57 @@ def write_json(path: Path, payload: list[dict[str, Any]]) -> None:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
 
-def matcher_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], bool]:
+def write_object_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, ensure_ascii=False, indent=2)
+
+
+def decisioner_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
     if matcher_name == "mock":
-        return is_mock_hit
+        return mock_match_decision
     if matcher_name == "openai":
         resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-        return lambda job: call_openai_title_vowel_matcher(job, resolved_api_key, model=model)
+        return lambda job: call_openai_title_vowel_decision(job, resolved_api_key, model=model)
     raise ValueError(f"Unsupported matcher: {matcher_name}")
+
+
+def matcher_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], bool]:
+    decisioner = decisioner_from_args(matcher_name, api_key, model)
+    return lambda job: bool(decisioner(job)["hit"])
 
 
 def classify_file(
     input_path: Path,
     output_root: Path,
     timestamp: str | None = None,
-    matcher: Callable[[dict[str, Any]], bool] = is_mock_hit,
-) -> tuple[Path, Path]:
+    decisioner: Callable[[dict[str, Any]], dict[str, Any]] = mock_match_decision,
+    matcher_name: str = DEFAULT_MATCHER,
+    model: str | None = None,
+) -> tuple[Path, Path, Path, dict[str, Any]]:
     resolved_timestamp = timestamp or timestamp_from_input(input_path)
-    hits, discards = split_jobs(load_jobs(input_path), matcher=matcher)
-    hits_path, discards_path = output_paths(input_path, output_root, resolved_timestamp)
+    jobs = load_jobs(input_path)
+    hits, discards, decisions = split_jobs_with_decisions(jobs, decisioner=decisioner)
+    hits_path, discards_path, metadata_path = output_paths(input_path, output_root, resolved_timestamp)
+    metadata = {
+        "matcher": matcher_name,
+        "model": model,
+        "matched_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "input_path": str(input_path),
+        "timestamp": resolved_timestamp,
+        "job_count": len(jobs),
+        "hits_count": len(hits),
+        "discards_count": len(discards),
+        "decisions": decisions,
+    }
     write_json(hits_path, hits)
     write_json(discards_path, discards)
-    return hits_path, discards_path
+    write_object_json(metadata_path, metadata)
+    return hits_path, discards_path, metadata_path, metadata
 
 
 def is_unclassified_jobs_json(path: Path) -> bool:
-    return path.suffix == ".json" and not path.name.endswith(("_hits.json", "_discard.json"))
+    return path.suffix == ".json" and not path.name.endswith(("_hits.json", "_discard.json", "_match_metadata.json"))
 
 
 def latest_discard_run(output_root: Path) -> Path:
@@ -250,13 +345,29 @@ def main() -> int:
 
     try:
         input_path = input_from_latest(args.output_root) if args.latest else args.input
-        matcher = matcher_from_args(args.matcher, os.environ.get("OPENAI_API_KEY"), args.openai_model)
-        hits_path, discards_path = classify_file(input_path, args.output_root, args.timestamp, matcher=matcher)
+        decisioner = decisioner_from_args(args.matcher, os.environ.get("OPENAI_API_KEY"), args.openai_model)
+        hits_path, discards_path, metadata_path, metadata = classify_file(
+            input_path,
+            args.output_root,
+            args.timestamp,
+            decisioner=decisioner,
+            matcher_name=args.matcher,
+            model=args.openai_model if args.matcher == "openai" else None,
+        )
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    for decision in metadata["decisions"]:
+        print(
+            "[decision] "
+            f"job_id={decision.get('job_id')} "
+            f"hit={str(decision.get('hit')).lower()} "
+            f"title={decision.get('title')!r} "
+            f"reason={decision.get('reason')!r}"
+        )
     print(f"Wrote {hits_path}")
     print(f"Wrote {discards_path}")
+    print(f"Wrote {metadata_path}")
     return 0
 
 

@@ -36,7 +36,7 @@ results/discard/<timestamp>/
 
 The matcher also has an OpenAI PoC mode using `gpt-5-nano`. It is intentionally not the default, because every API call costs money.
 
-For this first PoC, the prompt only checks whether the job title starts with a vowel. If yes, the job is a hit.
+For this first PoC, the prompt only checks whether the job title starts with a vowel. If yes, the job is a hit. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
 
 Local usage:
 
@@ -51,3 +51,11 @@ GitHub Actions usage:
 - optionally add repository variable `OPENAI_MODEL=gpt-5-nano`
 
 If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.
+
+Each matching run writes an audit file next to the discard output:
+
+```text
+results/discard/<timestamp>/linkedin_jobs_sample_match_metadata.json
+```
+
+The workflow log also prints one `[decision]` line per job with the job ID, hit value, title, and reason.
