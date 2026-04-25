@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -159,6 +160,11 @@ def load_job_profile(profile_path: Path) -> str:
     if not profile:
         raise ValueError(f"{profile_path} is empty")
     return profile
+
+
+def profile_cache_key(profile: str) -> str:
+    profile_hash = hashlib.sha256(profile.encode("utf-8")).hexdigest()[:16]
+    return f"job-profile:{profile_hash}"
 
 
 def job_ad_text(job: dict[str, Any]) -> str:
@@ -364,6 +370,7 @@ def call_openai_structured_json(
     schema: dict[str, Any],
     model: str = DEFAULT_OPENAI_MODEL,
     max_output_tokens: int = DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
+    prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], str]:
     if not api_key:
@@ -384,6 +391,8 @@ def call_openai_structured_json(
         },
         "max_output_tokens": max_output_tokens,
     }
+    if prompt_cache_key:
+        payload["prompt_cache_key"] = prompt_cache_key
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -435,6 +444,7 @@ def call_openai_match_decision(
     prompt: str,
     schema_name: str,
     model: str = DEFAULT_OPENAI_MODEL,
+    prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     response_payload, response_text = call_openai_structured_json(
@@ -443,6 +453,7 @@ def call_openai_match_decision(
         schema_name,
         match_decision_schema(),
         model=model,
+        prompt_cache_key=prompt_cache_key,
         post_json=post_json,
     )
     hit, reason = parse_match_response(response_text)
@@ -462,6 +473,7 @@ def call_openai_unicorn_decision(
     api_key: str,
     profile: str,
     model: str = DEFAULT_OPENAI_MODEL,
+    prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return call_openai_match_decision(
@@ -470,6 +482,7 @@ def call_openai_unicorn_decision(
         openai_unicorn_confirmation_prompt(job, profile),
         "job_unicorn_match",
         model=model,
+        prompt_cache_key=prompt_cache_key,
         post_json=post_json,
     )
 
@@ -479,6 +492,7 @@ def call_openai_unicorn_triage(
     api_key: str,
     profile: str,
     model: str = DEFAULT_OPENAI_MODEL,
+    prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     candidate_ids = {
@@ -492,6 +506,7 @@ def call_openai_unicorn_triage(
         triage_schema(),
         model=model,
         max_output_tokens=DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
+        prompt_cache_key=prompt_cache_key,
         post_json=post_json,
     )
     candidates = parse_triage_response(response_text, candidate_ids)
@@ -509,7 +524,15 @@ def openai_two_stage_decisions(
     model: str = DEFAULT_OPENAI_MODEL,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    triage = call_openai_unicorn_triage(jobs, api_key, profile, model=model, post_json=post_json)
+    cache_key = profile_cache_key(profile)
+    triage = call_openai_unicorn_triage(
+        jobs,
+        api_key,
+        profile,
+        model=model,
+        prompt_cache_key=cache_key,
+        post_json=post_json,
+    )
     triage_reasons = {
         candidate["candidate_id"]: candidate["reason"]
         for candidate in triage["candidates"]
@@ -531,6 +554,7 @@ def openai_two_stage_decisions(
             api_key,
             profile,
             model=model,
+            prompt_cache_key=cache_key,
             post_json=post_json,
         )
         confirmation["stage"] = "confirmation"

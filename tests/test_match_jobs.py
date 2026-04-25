@@ -26,6 +26,7 @@ from match_jobs import (
     parse_match_response,
     parse_hit_response,
     parse_triage_response,
+    profile_cache_key,
     rtf_to_text,
     split_jobs,
     split_jobs_from_decisions,
@@ -59,6 +60,14 @@ class MockMatcherTests(unittest.TestCase):
             profile_path.write_text(r"{\rtf1 Candidate\par Profile with \u246?}", encoding="utf-8")
 
             self.assertEqual(load_job_profile(profile_path), "Candidate\nProfile with ö")
+
+    def test_profile_cache_key_is_stable_and_opaque(self) -> None:
+        cache_key = profile_cache_key("Candidate profile")
+
+        self.assertEqual(cache_key, profile_cache_key("Candidate profile"))
+        self.assertNotEqual(cache_key, profile_cache_key("Different profile"))
+        self.assertTrue(cache_key.startswith("job-profile:"))
+        self.assertNotIn("Candidate", cache_key)
 
     def test_rtf_to_text_ignores_rtf_metadata(self) -> None:
         profile = r"{\rtf1{\fonttbl{\f0 Helvetica;}}{\info{\title Hidden}}{\*\generator Hidden;}Visible\line Text}"
@@ -188,6 +197,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
         self.assertEqual(set(payload["text"]["format"]["schema"]["required"]), {"hit", "reason"})
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
+        self.assertNotIn("prompt_cache_key", payload)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
 
     def test_openai_unicorn_decision_posts_profile_based_request_without_network(self) -> None:
@@ -211,6 +221,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertIn("Candidate profile: regulated products", payload["input"])
         self.assertIn("Title: Systems Lead", payload["input"])
         self.assertEqual(payload["text"]["format"]["name"], "job_unicorn_match")
+        self.assertNotIn("prompt_cache_key", payload)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
         self.assertTrue(decision["hit"])
         self.assertEqual(decision["reason"], "Rare overlap.")
@@ -243,6 +254,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(payload["model"], "gpt-5.4-mini")
         self.assertEqual(payload["text"]["format"]["name"], "job_unicorn_triage")
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_TRIAGE_MAX_OUTPUT_TOKENS)
+        self.assertNotIn("prompt_cache_key", payload)
         self.assertIn('"candidate_id": "1"', payload["input"])
         self.assertIn('"candidate_id": "2"', payload["input"])
         self.assertEqual(headers["Authorization"], "Bearer test-key")
@@ -276,6 +288,8 @@ class MockMatcherTests(unittest.TestCase):
         )
 
         self.assertEqual([call["text"]["format"]["name"] for call in calls], ["job_unicorn_triage", "job_unicorn_match"])
+        self.assertEqual(calls[0]["prompt_cache_key"], profile_cache_key("Candidate profile"))
+        self.assertEqual(calls[1]["prompt_cache_key"], profile_cache_key("Candidate profile"))
         self.assertEqual([decision["hit"] for decision in decisions], [True, False])
         self.assertEqual(decisions[0]["stage"], "confirmation")
         self.assertEqual(decisions[0]["triage_reason"], "Rare domain overlap.")
