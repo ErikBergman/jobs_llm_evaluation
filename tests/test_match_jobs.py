@@ -1,19 +1,24 @@
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from match_jobs import (
+    CHEAT_JOB_ID,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
     OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
     OPENAI_TRIAGE_MIN_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
+    assert_cheat_mode_language_model_hit,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
     call_openai_unicorn_decision,
     call_openai_unicorn_triage,
     classify_file,
+    env_flag_enabled,
     extract_response_text,
     input_from_latest,
     is_mock_hit,
@@ -49,6 +54,12 @@ class MockMatcherTests(unittest.TestCase):
     def test_missing_or_empty_description_is_discard(self) -> None:
         self.assertFalse(is_mock_hit({}))
         self.assertFalse(is_mock_hit({"description": ""}))
+
+    def test_env_flag_enabled_accepts_github_variable_true(self) -> None:
+        self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "true"}))
+        self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "1"}))
+        self.assertFalse(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "false"}))
+        self.assertFalse(env_flag_enabled("CHEAT_MODE", {}))
 
     def test_load_job_profile_reads_plain_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -390,6 +401,65 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(discards, [{"job_id": "2"}])
         with self.assertRaisesRegex(ValueError, "Decision count"):
             split_jobs_from_decisions(jobs, [{"hit": True}])
+
+    def test_cheat_mode_language_model_hit_logs_and_passes(self) -> None:
+        metadata = {
+            "decisions": [
+                {
+                    "job_id": CHEAT_JOB_ID,
+                    "title": "Perfect Job",
+                    "hit": True,
+                    "reason": "Strong fit.",
+                    "matcher": "openai",
+                }
+            ]
+        }
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            assert_cheat_mode_language_model_hit(metadata)
+
+        self.assertIn("[cheat-mode]", output.getvalue())
+        self.assertIn("language_model_hit=true", output.getvalue())
+        self.assertIn("Strong fit.", output.getvalue())
+
+    def test_cheat_mode_language_model_miss_logs_and_errors(self) -> None:
+        metadata = {
+            "decisions": [
+                {
+                    "job_id": CHEAT_JOB_ID,
+                    "title": "Perfect Job",
+                    "hit": False,
+                    "reason": "Rejected by triage.",
+                    "matcher": "openai",
+                }
+            ]
+        }
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            with self.assertRaisesRegex(ValueError, "did not classify the cheat job as a match"):
+                assert_cheat_mode_language_model_hit(metadata)
+
+        self.assertIn("language_model_hit=false", output.getvalue())
+        self.assertIn("Rejected by triage.", output.getvalue())
+
+    def test_cheat_mode_requires_language_model_matcher(self) -> None:
+        metadata = {
+            "decisions": [
+                {
+                    "job_id": CHEAT_JOB_ID,
+                    "title": "Perfect Job",
+                    "hit": True,
+                    "reason": "Mock hit.",
+                    "matcher": "mock",
+                }
+            ]
+        }
+
+        with redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "requires the language-model matcher"):
+                assert_cheat_mode_language_model_hit(metadata)
 
     def test_timestamp_is_derived_from_discard_input_path(self) -> None:
         input_path = Path("results/discard/20260425_120000/linkedin_jobs_sample.json")

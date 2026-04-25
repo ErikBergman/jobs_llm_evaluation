@@ -61,6 +61,12 @@ GitHub Actions usage:
 
 If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.
 
+## Cheat mode
+
+Set repository variable `CHEAT_MODE=true` to inject `cheat_mode_job_ad.rtf` as one scraped job result. In GitHub Actions, keep that file in the same Koofr memory folder as `job_profile.rtf`; locally, place it under the selected `--results-root` or pass `--cheat-ad /path/to/cheat_mode_job_ad.rtf`.
+
+When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. The workflow prints a `[cheat-mode]` log line with the language-model decision for `cheat-mode-perfect-job` and fails the run if the model does not classify it as a hit.
+
 Each matching run writes an audit file next to the discard output:
 
 ```text

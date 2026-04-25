@@ -21,6 +21,7 @@ DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 256
+CHEAT_JOB_ID = "cheat-mode-perfect-job"
 OPENAI_TRIAGE_BASE_OUTPUT_TOKENS = 160
 OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 80
 OPENAI_TRIAGE_MIN_OUTPUT_TOKENS = 256
@@ -46,6 +47,11 @@ def is_mock_hit(job: dict[str, Any]) -> bool:
     if not isinstance(description, str):
         return False
     return bool(ENGINEER_WORD.search(description))
+
+
+def env_flag_enabled(name: str, environ: dict[str, str] | None = None) -> bool:
+    value = (environ or os.environ).get(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def rtf_to_text(rtf: str) -> str:
@@ -729,6 +735,41 @@ def write_object_json(path: Path, payload: dict[str, Any]) -> None:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
 
+def cheat_mode_decision(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    decisions = metadata.get("decisions")
+    if not isinstance(decisions, list):
+        return None
+    for decision in decisions:
+        if isinstance(decision, dict) and decision.get("job_id") == CHEAT_JOB_ID:
+            return decision
+    return None
+
+
+def assert_cheat_mode_language_model_hit(metadata: dict[str, Any]) -> None:
+    decision = cheat_mode_decision(metadata)
+    if decision is None:
+        raise ValueError(f"CHEAT_MODE=true but {CHEAT_JOB_ID!r} was not present in matcher decisions")
+
+    matcher = decision.get("matcher")
+    hit = decision.get("hit")
+    title = decision.get("title")
+    reason = decision.get("reason")
+    print(
+        "[cheat-mode] "
+        f"job_id={CHEAT_JOB_ID} "
+        f"language_model_hit={str(hit).lower()} "
+        f"matcher={matcher!r} "
+        f"title={title!r} "
+        f"reason={reason!r}",
+        flush=True,
+    )
+
+    if matcher != "openai":
+        raise ValueError(f"CHEAT_MODE=true requires the language-model matcher, but matcher was {matcher!r}")
+    if hit is not True:
+        raise ValueError("CHEAT_MODE=true but the language model did not classify the cheat job as a match")
+
+
 def decisioner_from_args(
     matcher_name: str,
     api_key: str | None,
@@ -848,6 +889,12 @@ def main() -> int:
             f"title={decision.get('title')!r} "
             f"reason={decision.get('reason')!r}"
         )
+    try:
+        if env_flag_enabled("CHEAT_MODE"):
+            assert_cheat_mode_language_model_hit(metadata)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     print(f"Wrote {hits_path}")
     print(f"Wrote {discards_path}")
     print(f"Wrote {metadata_path}")

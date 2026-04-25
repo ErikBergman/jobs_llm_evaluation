@@ -1,16 +1,23 @@
+import io
+import json
 import tempfile
 import unittest
-import json
+from unittest import mock
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from linkedin_guest_jobs import (
+    CHEAT_JOB_ID,
     GUEST_SEARCH_URL,
     JobCard,
     collect_unseen_cards,
+    env_flag_enabled,
     guest_search_url,
+    load_cheat_job_ad,
     load_search_config,
     load_seen_job_ids,
+    main,
+    parse_cheat_job_ad,
     search_url_from_config,
     select_unseen_cards,
 )
@@ -147,6 +154,115 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertEqual([card.job_id for card in cards], ["new-1", "new-2"])
+
+    def test_env_flag_enabled_accepts_github_variable_true(self) -> None:
+        self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "true"}))
+        self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "1"}))
+        self.assertFalse(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "false"}))
+        self.assertFalse(env_flag_enabled("CHEAT_MODE", {}))
+
+    def test_parse_cheat_job_ad_uses_expected_sections(self) -> None:
+        job = parse_cheat_job_ad(
+            """
+            Job Title
+            Backend Python Integration Developer
+
+            Company
+            Nordic Diagnostics Automation
+
+            Location
+            Lund, Skane County, Sweden
+
+            Benefit
+            Hybrid
+
+            Posted
+            Today
+
+            Job Description
+            Build Python integrations.
+            Validate regulated workflows.
+            """
+        )
+
+        self.assertEqual(job.job_id, CHEAT_JOB_ID)
+        self.assertEqual(job.title, "Backend Python Integration Developer")
+        self.assertEqual(job.company, "Nordic Diagnostics Automation")
+        self.assertEqual(job.location, "Lund, Skane County, Sweden")
+        self.assertEqual(job.benefit, "Hybrid")
+        self.assertEqual(job.posted, "Today")
+        self.assertIn("Build Python integrations.", job.description)
+        self.assertIn("Validate regulated workflows.", job.description)
+
+    def test_load_cheat_job_ad_extracts_rtf_text(self) -> None:
+        rtf = (
+            r"{\rtf1 Job Title\par Backend Python Integration Developer\par "
+            r"Job Description\par Build Python integrations.\par}"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "cheat_mode_job_ad.rtf"
+            path.write_text(rtf, encoding="utf-8")
+
+            job = load_cheat_job_ad(path)
+
+        self.assertEqual(job.title, "Backend Python Integration Developer")
+        self.assertEqual(job.description, "Build Python integrations.")
+
+    def test_load_cheat_job_ad_extracts_textutil_line_breaks(self) -> None:
+        rtf = "{\\rtf1 Job Title\\\nBackend Python Integration Developer\\\nJob Description\\\nBuild Python integrations.\\\n}"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "cheat_mode_job_ad.rtf"
+            path.write_text(rtf, encoding="utf-8")
+
+            job = load_cheat_job_ad(path)
+
+        self.assertEqual(job.title, "Backend Python Integration Developer")
+        self.assertEqual(job.description, "Build Python integrations.")
+
+    def test_main_writes_cheat_job_even_when_no_public_cards_are_found(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_path = root / "input.json"
+            results_root = root / "results"
+            cheat_path = results_root / "cheat_mode_job_ad.rtf"
+            input_path.write_text(json.dumps({"keywords": "engineer"}), encoding="utf-8")
+            results_root.mkdir()
+            cheat_path.write_text(
+                "\n".join(
+                    [
+                        "Job Title",
+                        "Backend Python Integration Developer",
+                        "Job Description",
+                        "Build Python integrations.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch("linkedin_guest_jobs.collect_unseen_cards", return_value=[]):
+                with mock.patch.dict("os.environ", {"CHEAT_MODE": "true"}, clear=False):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO):
+                        with mock.patch(
+                            "sys.argv",
+                            [
+                                "linkedin_guest_jobs.py",
+                                "--input",
+                                str(input_path),
+                                "--results-root",
+                                str(results_root),
+                                "--limit",
+                                "2",
+                            ],
+                        ):
+                            exit_code = main()
+
+            output_files = list(results_root.glob("discard/*/linkedin_jobs_sample.json"))
+            payload = json.loads(output_files[0].read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(output_files), 1)
+        self.assertEqual(payload[0]["job_id"], CHEAT_JOB_ID)
+        self.assertEqual(payload[0]["title"], "Backend Python Integration Developer")
 
 
 if __name__ == "__main__":

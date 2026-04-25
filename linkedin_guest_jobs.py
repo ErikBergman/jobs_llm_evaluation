@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import asdict, dataclass
@@ -25,6 +26,20 @@ DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
 DEFAULT_MAX_SEARCH_PAGES = 10
+DEFAULT_CHEAT_AD_NAME = "cheat_mode_job_ad.rtf"
+CHEAT_JOB_ID = "cheat-mode-perfect-job"
+RTF_DESTINATIONS = {
+    "fonttbl",
+    "colortbl",
+    "datastore",
+    "stylesheet",
+    "info",
+    "pict",
+    "object",
+    "header",
+    "footer",
+    "footnote",
+}
 SEARCH_FIELD_ALIASES = {
     "keywords": ("keywords", "search_terms", "query"),
     "location": ("location",),
@@ -64,6 +79,124 @@ class JobDetail(JobCard):
 
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(value)).strip()
+
+
+def rtf_to_text(rtf: str) -> str:
+    output: list[str] = []
+    ignored_groups = [False]
+    pending_ignorable_destination = False
+    unicode_skip_count = 1
+    chars_to_skip = 0
+    index = 0
+
+    while index < len(rtf):
+        char = rtf[index]
+        if chars_to_skip:
+            chars_to_skip -= 1
+            index += 1
+            continue
+
+        if char == "{":
+            ignored_groups.append(ignored_groups[-1])
+            pending_ignorable_destination = False
+            index += 1
+            continue
+        if char == "}":
+            if len(ignored_groups) > 1:
+                ignored_groups.pop()
+            pending_ignorable_destination = False
+            index += 1
+            continue
+        if char != "\\":
+            if not ignored_groups[-1]:
+                output.append(char)
+            index += 1
+            continue
+
+        index += 1
+        if index >= len(rtf):
+            break
+
+        escaped = rtf[index]
+        if escaped in "\r\n":
+            if not ignored_groups[-1]:
+                output.append("\n")
+            index += 1
+            if escaped == "\r" and index < len(rtf) and rtf[index] == "\n":
+                index += 1
+            continue
+        if escaped in "\\{}":
+            if not ignored_groups[-1]:
+                output.append(escaped)
+            index += 1
+            continue
+        if escaped == "'":
+            hex_value = rtf[index + 1 : index + 3]
+            if len(hex_value) == 2:
+                try:
+                    if not ignored_groups[-1]:
+                        output.append(bytes.fromhex(hex_value).decode("latin-1"))
+                    index += 3
+                    continue
+                except ValueError:
+                    pass
+        if escaped == "~":
+            if not ignored_groups[-1]:
+                output.append(" ")
+            index += 1
+            continue
+        if escaped in "-_":
+            index += 1
+            continue
+        if escaped == "*":
+            ignored_groups[-1] = True
+            pending_ignorable_destination = True
+            index += 1
+            continue
+        if not escaped.isalpha():
+            index += 1
+            continue
+
+        word_start = index
+        while index < len(rtf) and rtf[index].isalpha():
+            index += 1
+        word = rtf[word_start:index]
+        sign = 1
+        if index < len(rtf) and rtf[index] == "-":
+            sign = -1
+            index += 1
+        number_start = index
+        while index < len(rtf) and rtf[index].isdigit():
+            index += 1
+        number = rtf[number_start:index]
+        numeric_value = sign * int(number) if number else None
+        if index < len(rtf) and rtf[index] == " ":
+            index += 1
+
+        if pending_ignorable_destination or word in RTF_DESTINATIONS:
+            ignored_groups[-1] = True
+            pending_ignorable_destination = False
+            continue
+        pending_ignorable_destination = False
+
+        if ignored_groups[-1]:
+            continue
+        if word in ("par", "line"):
+            output.append("\n")
+        elif word == "tab":
+            output.append("\t")
+        elif word == "uc" and numeric_value is not None:
+            unicode_skip_count = max(numeric_value, 0)
+        elif word == "u" and numeric_value is not None:
+            output.append(chr(numeric_value if numeric_value >= 0 else numeric_value + 65536))
+            chars_to_skip = unicode_skip_count
+
+    return "".join(output)
+
+
+def env_flag_enabled(name: str, environ: dict[str, str] | None = None) -> bool:
+    value = (environ or os.environ).get(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def class_contains(attrs: dict[str, str], class_name: str) -> bool:
@@ -442,6 +575,67 @@ def parse_job_detail(html: str, card: JobCard) -> JobDetail:
     return JobDetail(**payload)
 
 
+def parse_cheat_job_ad(text: str) -> JobDetail:
+    labels = {
+        "Job Title": "title",
+        "Company": "company",
+        "Location": "location",
+        "Benefit": "benefit",
+        "Posted": "posted",
+        "Job Description": "description",
+    }
+    fields: dict[str, list[str]] = {field: [] for field in labels.values()}
+    current_field: str | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line in labels:
+            current_field = labels[line]
+            continue
+        if current_field and line:
+            fields[current_field].append(line)
+
+    title = clean_text(" ".join(fields["title"]))
+    description = "\n".join(fields["description"]).strip()
+    if not title or not description:
+        raise ValueError("Cheat-mode job ad must include 'Job Title' and 'Job Description' sections")
+
+    return JobDetail(
+        job_id=CHEAT_JOB_ID,
+        title=title,
+        company=clean_text(" ".join(fields["company"])),
+        location=clean_text(" ".join(fields["location"])),
+        benefit=clean_text(" ".join(fields["benefit"])),
+        posted=clean_text(" ".join(fields["posted"])) or "Today",
+        posted_date=datetime.now().strftime("%Y-%m-%d"),
+        url="cheat-mode://perfect-job-ad",
+        description=description,
+    )
+
+
+def load_cheat_job_ad(path: Path) -> JobDetail:
+    if not path.exists():
+        raise ValueError(f"Cheat mode is enabled but the cheat job ad was not found: {path}")
+    raw_bytes = path.read_bytes()
+    try:
+        raw_ad = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raw_ad = raw_bytes.decode("latin-1")
+    text = rtf_to_text(raw_ad).strip() if raw_ad.lstrip().startswith("{\\rtf") else raw_ad.strip()
+    if not text:
+        raise ValueError(f"Cheat-mode job ad is empty: {path}")
+    return parse_cheat_job_ad(text)
+
+
+def cheat_ad_path(results_root: Path, explicit_path: Path | None = None) -> Path:
+    if explicit_path is not None:
+        return explicit_path
+    env_path = os.environ.get("CHEAT_MODE_JOB_AD_PATH", "").strip()
+    if env_path:
+        return Path(env_path)
+    return results_root / DEFAULT_CHEAT_AD_NAME
+
+
 def fetch_job_details(cards: Iterable[JobCard]) -> list[JobDetail]:
     jobs: list[JobDetail] = []
     for card in cards:
@@ -462,16 +656,25 @@ def main() -> int:
     parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
     parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT, help="Results memory root")
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_SEARCH_PAGES, help="Maximum search pages to scan")
+    parser.add_argument(
+        "--cheat-ad",
+        type=Path,
+        default=None,
+        help="Optional path to cheat_mode_job_ad.rtf when CHEAT_MODE=true",
+    )
     args = parser.parse_args()
 
     search_url = search_url_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
     cards = collect_unseen_cards(search_url, args.limit, seen_job_ids, max_pages=args.max_pages)
-    if not cards:
+    jobs = fetch_job_details(cards)
+    if env_flag_enabled("CHEAT_MODE"):
+        jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))
+
+    if not jobs:
         print("No new public job cards found.", file=sys.stderr)
         return 1
 
-    jobs = fetch_job_details(cards)
     payload = [asdict(job) for job in jobs]
     output_path = timestamped_output_path(args.output, results_root=args.results_root)
     output_path.parent.mkdir(parents=True, exist_ok=True)
