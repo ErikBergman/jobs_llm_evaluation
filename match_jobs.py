@@ -5,14 +5,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
+DEFAULT_MATCHER = "mock"
+DEFAULT_OPENAI_MODEL = "gpt-5-nano"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
 def is_mock_hit(job: dict[str, Any]) -> bool:
@@ -20,6 +26,100 @@ def is_mock_hit(job: dict[str, Any]) -> bool:
     if not isinstance(description, str):
         return False
     return bool(ENGINEER_WORD.search(description))
+
+
+def openai_title_vowel_prompt(job: dict[str, Any]) -> str:
+    title = job.get("title", "")
+    if not isinstance(title, str):
+        title = ""
+    return (
+        "Determine whether this job title starts with a vowel. "
+        "If the first letter of the title is A, E, I, O, or U, return hit=true. "
+        "Otherwise return hit=false.\n\n"
+        f"Job title: {title}"
+    )
+
+
+def extract_response_text(response_payload: dict[str, Any]) -> str:
+    if isinstance(response_payload.get("output_text"), str):
+        return response_payload["output_text"]
+
+    chunks: list[str] = []
+    for item in response_payload.get("output", []):
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content", []):
+            if isinstance(content, dict) and content.get("type") == "output_text":
+                text = content.get("text")
+                if isinstance(text, str):
+                    chunks.append(text)
+    return "".join(chunks)
+
+
+def parse_hit_response(response_text: str) -> bool:
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"OpenAI response was not valid JSON: {response_text!r}") from error
+
+    hit = payload.get("hit")
+    if not isinstance(hit, bool):
+        raise ValueError(f"OpenAI response JSON must contain boolean 'hit': {response_text!r}")
+    return hit
+
+
+def call_openai_title_vowel_matcher(
+    job: dict[str, Any],
+    api_key: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> bool:
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is required when --matcher openai is used")
+
+    payload = {
+        "model": model,
+        "input": openai_title_vowel_prompt(job),
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "job_title_vowel_match",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "hit": {"type": "boolean"},
+                    },
+                    "required": ["hit"],
+                },
+            }
+        },
+        "max_output_tokens": 20,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    response_payload = (post_json or post_json_to_api)(OPENAI_RESPONSES_URL, payload, headers)
+    return parse_hit_response(extract_response_text(response_payload))
+
+
+def post_json_to_api(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+        raise ValueError(f"OpenAI API request failed with HTTP {error.code}: {detail}") from error
+    except URLError as error:
+        raise ValueError(f"OpenAI API request failed: {error}") from error
 
 
 def load_jobs(input_path: Path) -> list[dict[str, Any]]:
@@ -30,11 +130,14 @@ def load_jobs(input_path: Path) -> list[dict[str, Any]]:
     return jobs
 
 
-def split_jobs(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def split_jobs(
+    jobs: list[dict[str, Any]],
+    matcher: Callable[[dict[str, Any]], bool] = is_mock_hit,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     hits: list[dict[str, Any]] = []
     discards: list[dict[str, Any]] = []
     for job in jobs:
-        if is_mock_hit(job):
+        if matcher(job):
             hits.append(job)
         else:
             discards.append(job)
@@ -63,9 +166,23 @@ def write_json(path: Path, payload: list[dict[str, Any]]) -> None:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
 
-def classify_file(input_path: Path, output_root: Path, timestamp: str | None = None) -> tuple[Path, Path]:
+def matcher_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], bool]:
+    if matcher_name == "mock":
+        return is_mock_hit
+    if matcher_name == "openai":
+        resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        return lambda job: call_openai_title_vowel_matcher(job, resolved_api_key, model=model)
+    raise ValueError(f"Unsupported matcher: {matcher_name}")
+
+
+def classify_file(
+    input_path: Path,
+    output_root: Path,
+    timestamp: str | None = None,
+    matcher: Callable[[dict[str, Any]], bool] = is_mock_hit,
+) -> tuple[Path, Path]:
     resolved_timestamp = timestamp or timestamp_from_input(input_path)
-    hits, discards = split_jobs(load_jobs(input_path))
+    hits, discards = split_jobs(load_jobs(input_path), matcher=matcher)
     hits_path, discards_path = output_paths(input_path, output_root, resolved_timestamp)
     write_json(hits_path, hits)
     write_json(discards_path, discards)
@@ -104,11 +221,14 @@ def main() -> int:
     input_group.add_argument("--latest", action="store_true", help="Use the newest results/discard/<timestamp>/ scrape")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT, help="Results root directory")
     parser.add_argument("--timestamp", help="Result timestamp folder name")
+    parser.add_argument("--matcher", choices=("mock", "openai"), default=DEFAULT_MATCHER, help="Matcher backend")
+    parser.add_argument("--openai-model", default=DEFAULT_OPENAI_MODEL, help="OpenAI model for --matcher openai")
     args = parser.parse_args()
 
     try:
         input_path = input_from_latest(args.output_root) if args.latest else args.input
-        hits_path, discards_path = classify_file(input_path, args.output_root, args.timestamp)
+        matcher = matcher_from_args(args.matcher, os.environ.get("OPENAI_API_KEY"), args.openai_model)
+        hits_path, discards_path = classify_file(input_path, args.output_root, args.timestamp, matcher=matcher)
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

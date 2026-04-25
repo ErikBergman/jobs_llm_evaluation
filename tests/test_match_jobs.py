@@ -3,7 +3,20 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from match_jobs import classify_file, input_from_latest, is_mock_hit, latest_discard_run, timestamp_from_input
+from match_jobs import (
+    DEFAULT_OPENAI_MODEL,
+    OPENAI_RESPONSES_URL,
+    call_openai_title_vowel_matcher,
+    classify_file,
+    extract_response_text,
+    input_from_latest,
+    is_mock_hit,
+    latest_discard_run,
+    openai_title_vowel_prompt,
+    parse_hit_response,
+    split_jobs,
+    timestamp_from_input,
+)
 
 
 class MockMatcherTests(unittest.TestCase):
@@ -16,6 +29,57 @@ class MockMatcherTests(unittest.TestCase):
     def test_missing_or_empty_description_is_discard(self) -> None:
         self.assertFalse(is_mock_hit({}))
         self.assertFalse(is_mock_hit({"description": ""}))
+
+    def test_openai_prompt_uses_job_title_only(self) -> None:
+        prompt = openai_title_vowel_prompt({"title": "Analyst", "description": "Engineer needed"})
+
+        self.assertIn("Job title: Analyst", prompt)
+        self.assertNotIn("Engineer needed", prompt)
+
+    def test_parse_hit_response_requires_boolean_hit(self) -> None:
+        self.assertTrue(parse_hit_response('{"hit": true}'))
+        self.assertFalse(parse_hit_response('{"hit": false}'))
+        with self.assertRaisesRegex(ValueError, "boolean 'hit'"):
+            parse_hit_response('{"hit": "true"}')
+
+    def test_extract_response_text_reads_responses_output_shape(self) -> None:
+        payload = {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {"type": "output_text", "text": '{"hit": true}'},
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(extract_response_text(payload), '{"hit": true}')
+
+    def test_openai_matcher_posts_structured_request_without_network(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append((url, payload, headers))
+            return {"output_text": '{"hit": true}'}
+
+        self.assertTrue(call_openai_title_vowel_matcher({"title": "Engineer"}, "test-key", post_json=fake_post))
+
+        url, payload, headers = calls[0]
+        self.assertEqual(url, OPENAI_RESPONSES_URL)
+        self.assertEqual(payload["model"], DEFAULT_OPENAI_MODEL)
+        self.assertIn("Job title: Engineer", payload["input"])
+        self.assertEqual(payload["text"]["format"]["type"], "json_schema")
+        self.assertEqual(payload["max_output_tokens"], 20)
+        self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_split_jobs_accepts_custom_matcher(self) -> None:
+        jobs = [{"title": "Analyst"}, {"title": "Engineer"}]
+
+        hits, discards = split_jobs(jobs, matcher=lambda job: job["title"].startswith("A"))
+
+        self.assertEqual(hits, [{"title": "Analyst"}])
+        self.assertEqual(discards, [{"title": "Engineer"}])
 
     def test_timestamp_is_derived_from_discard_input_path(self) -> None:
         input_path = Path("results/discard/20260425_120000/linkedin_jobs_sample.json")

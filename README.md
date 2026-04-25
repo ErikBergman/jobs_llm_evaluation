@@ -31,3 +31,23 @@ Rejected jobs are written back under:
 ```text
 results/discard/<timestamp>/
 ```
+
+## OpenAI matcher PoC
+
+The matcher also has an OpenAI PoC mode using `gpt-5-nano`. It is intentionally not the default, because every API call costs money.
+
+For this first PoC, the prompt only checks whether the job title starts with a vowel. If yes, the job is a hit.
+
+Local usage:
+
+```bash
+OPENAI_API_KEY=... python3 match_jobs.py --latest --matcher openai
+```
+
+GitHub Actions usage:
+
+- add repository secret `OPENAI_API_KEY`
+- add repository variable `JOB_MATCHER_MODE=openai`
+- optionally add repository variable `OPENAI_MODEL=gpt-5-nano`
+
+If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.
