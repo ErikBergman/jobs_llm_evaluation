@@ -15,7 +15,7 @@ jobs:
   search:
     runs-on: ubuntu-latest
     env:
-      JOB_SEARCH_LIMIT: ${{ vars.JOB_SEARCH_LIMIT || '10' }}
+      ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '10' }}
       JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '10' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
@@ -94,14 +94,14 @@ jobs:
         id: scrape
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
-          JOB_SEARCH_LIMIT: ${{ env.JOB_SEARCH_LIMIT }}
+          ENTRIES_NUMBER_LIMIT: ${{ env.ENTRIES_NUMBER_LIMIT }}
           JOB_SEARCH_MAX_PAGES: ${{ env.JOB_SEARCH_MAX_PAGES }}
         shell: bash
         run: |
           set +e
           python3 linkedin_guest_jobs.py \
             --results-root "${RUNTIME_RESULTS_DIR}" \
-            --limit "${JOB_SEARCH_LIMIT}" \
+            --limit "${ENTRIES_NUMBER_LIMIT}" \
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
             --output linkedin_jobs_sample.json 2>&1 | tee scrape.log
           scrape_status="${PIPESTATUS[0]}"
