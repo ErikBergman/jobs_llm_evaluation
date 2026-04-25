@@ -398,7 +398,7 @@ def call_openai_structured_json(
     payload = {
         "model": model,
         "input": prompt,
-        "reasoning": {"effort": "minimal"},
+        "reasoning": {"effort": "medium"},
         "text": {
             "verbosity": "low",
             "format": {
