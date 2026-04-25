@@ -50,7 +50,7 @@ def is_mock_hit(job: dict[str, Any]) -> bool:
 
 
 def env_flag_enabled(name: str, environ: dict[str, str] | None = None) -> bool:
-    value = (environ or os.environ).get(name, "")
+    value = (os.environ if environ is None else environ).get(name, "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
