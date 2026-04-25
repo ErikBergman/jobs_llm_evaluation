@@ -18,6 +18,7 @@ ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5-nano"
+DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 80
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
@@ -53,7 +54,25 @@ def extract_response_text(response_payload: dict[str, Any]) -> str:
                 text = content.get("text")
                 if isinstance(text, str):
                     chunks.append(text)
+            elif isinstance(content, dict) and isinstance(content.get("text"), str):
+                chunks.append(content["text"])
     return "".join(chunks)
+
+
+def summarize_response_shape(response_payload: dict[str, Any]) -> str:
+    summary = {
+        "id": response_payload.get("id"),
+        "status": response_payload.get("status"),
+        "model": response_payload.get("model"),
+        "incomplete_details": response_payload.get("incomplete_details"),
+        "error": response_payload.get("error"),
+        "output_types": [
+            item.get("type")
+            for item in response_payload.get("output", [])
+            if isinstance(item, dict)
+        ],
+    }
+    return json.dumps(summary, ensure_ascii=False)
 
 
 def parse_hit_response(response_text: str) -> bool:
@@ -95,14 +114,17 @@ def call_openai_title_vowel_matcher(
                 },
             }
         },
-        "max_output_tokens": 20,
+        "max_output_tokens": DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     response_payload = (post_json or post_json_to_api)(OPENAI_RESPONSES_URL, payload, headers)
-    return parse_hit_response(extract_response_text(response_payload))
+    response_text = extract_response_text(response_payload)
+    if not response_text:
+        raise ValueError(f"OpenAI response did not include output text: {summarize_response_shape(response_payload)}")
+    return parse_hit_response(response_text)
 
 
 def post_json_to_api(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:

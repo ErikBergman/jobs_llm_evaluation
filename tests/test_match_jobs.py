@@ -5,6 +5,7 @@ from pathlib import Path
 
 from match_jobs import (
     DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
     call_openai_title_vowel_matcher,
     classify_file,
@@ -15,6 +16,7 @@ from match_jobs import (
     openai_title_vowel_prompt,
     parse_hit_response,
     split_jobs,
+    summarize_response_shape,
     timestamp_from_input,
 )
 
@@ -56,6 +58,35 @@ class MockMatcherTests(unittest.TestCase):
 
         self.assertEqual(extract_response_text(payload), '{"hit": true}')
 
+    def test_extract_response_text_accepts_text_field_without_output_text_type(self) -> None:
+        payload = {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {"type": "text", "text": '{"hit": false}'},
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(extract_response_text(payload), '{"hit": false}')
+
+    def test_missing_openai_output_text_reports_response_shape(self) -> None:
+        payload = {
+            "id": "resp_123",
+            "status": "incomplete",
+            "model": DEFAULT_OPENAI_MODEL,
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "output": [{"type": "reasoning"}],
+        }
+
+        summary = summarize_response_shape(payload)
+
+        self.assertIn('"status": "incomplete"', summary)
+        self.assertIn('"reason": "max_output_tokens"', summary)
+        self.assertIn('"reasoning"', summary)
+
     def test_openai_matcher_posts_structured_request_without_network(self) -> None:
         calls = []
 
@@ -70,8 +101,15 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(payload["model"], DEFAULT_OPENAI_MODEL)
         self.assertIn("Job title: Engineer", payload["input"])
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
-        self.assertEqual(payload["max_output_tokens"], 20)
+        self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_openai_matcher_errors_with_response_shape_when_no_text(self) -> None:
+        def fake_post(url, payload, headers):
+            return {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}, "output": []}
+
+        with self.assertRaisesRegex(ValueError, "did not include output text"):
+            call_openai_title_vowel_matcher({"title": "Engineer"}, "test-key", post_json=fake_post)
 
     def test_split_jobs_accepts_custom_matcher(self) -> None:
         jobs = [{"title": "Analyst"}, {"title": "Engineer"}]
