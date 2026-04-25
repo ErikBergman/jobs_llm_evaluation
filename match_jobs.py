@@ -292,6 +292,11 @@ def summarize_response_shape(response_payload: dict[str, Any]) -> str:
     return json.dumps(summary, ensure_ascii=False)
 
 
+def response_usage(response_payload: dict[str, Any]) -> dict[str, Any] | None:
+    usage = response_payload.get("usage")
+    return usage if isinstance(usage, dict) else None
+
+
 def parse_match_response(response_text: str) -> tuple[bool, str]:
     try:
         payload = json.loads(response_text)
@@ -464,6 +469,7 @@ def call_openai_match_decision(
         "reason": reason,
         "matcher": "openai",
         "model": response_payload.get("model", model),
+        "usage": response_usage(response_payload),
         "raw_response": response_text,
     }
 
@@ -513,6 +519,7 @@ def call_openai_unicorn_triage(
     return {
         "candidates": candidates,
         "model": response_payload.get("model", model),
+        "usage": response_usage(response_payload),
         "raw_response": response_text,
     }
 
@@ -575,12 +582,14 @@ def openai_two_stage_decisions(
                 "reason": "Rejected by first-stage OpenAI triage.",
                 "matcher": "openai",
                 "model": triage["model"],
+                "usage": None,
                 "stage": "triage",
                 "candidate_id": candidate_id,
             })
 
     for decision in decisions:
         decision["triage_candidate_count"] = len(triage["candidates"])
+        decision["triage_usage"] = triage["usage"]
         if decision.get("candidate_id") in triage_reasons:
             decision["triage_reason"] = triage_reasons[decision["candidate_id"]]
     return decisions

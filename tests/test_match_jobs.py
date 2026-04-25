@@ -28,6 +28,7 @@ from match_jobs import (
     parse_triage_response,
     profile_cache_key,
     rtf_to_text,
+    response_usage,
     split_jobs,
     split_jobs_from_decisions,
     split_jobs_with_decisions,
@@ -179,6 +180,13 @@ class MockMatcherTests(unittest.TestCase):
         self.assertIn('"reason": "max_output_tokens"', summary)
         self.assertIn('"reasoning"', summary)
 
+    def test_response_usage_returns_usage_object_only(self) -> None:
+        usage = {"input_tokens": 10, "output_tokens": 2}
+
+        self.assertEqual(response_usage({"usage": usage}), usage)
+        self.assertIsNone(response_usage({"usage": []}))
+        self.assertIsNone(response_usage({}))
+
     def test_openai_matcher_posts_structured_request_without_network(self) -> None:
         calls = []
 
@@ -205,7 +213,11 @@ class MockMatcherTests(unittest.TestCase):
 
         def fake_post(url, payload, headers):
             calls.append((url, payload, headers))
-            return {"model": "gpt-5.4-mini-test", "output_text": '{"hit": true, "reason": "Rare overlap."}'}
+            return {
+                "model": "gpt-5.4-mini-test",
+                "usage": {"input_tokens": 100, "output_tokens": 20},
+                "output_text": '{"hit": true, "reason": "Rare overlap."}',
+            }
 
         decision = call_openai_unicorn_decision(
             {"job_id": "1", "title": "Systems Lead", "description": "Own regulated product strategy."},
@@ -227,6 +239,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decision["reason"], "Rare overlap.")
         self.assertEqual(decision["matcher"], "openai")
         self.assertEqual(decision["model"], "gpt-5.4-mini-test")
+        self.assertEqual(decision["usage"], {"input_tokens": 100, "output_tokens": 20})
 
     def test_openai_triage_posts_batched_request_without_network(self) -> None:
         calls = []
@@ -235,6 +248,7 @@ class MockMatcherTests(unittest.TestCase):
             calls.append((url, payload, headers))
             return {
                 "model": "gpt-5.4-mini-test",
+                "usage": {"input_tokens": 400, "output_tokens": 60},
                 "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Worth confirmation."}]}',
             }
 
@@ -260,6 +274,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer test-key")
         self.assertEqual(triage["candidates"], [{"candidate_id": "1", "reason": "Worth confirmation."}])
         self.assertEqual(triage["model"], "gpt-5.4-mini-test")
+        self.assertEqual(triage["usage"], {"input_tokens": 400, "output_tokens": 60})
 
     def test_openai_two_stage_decisions_confirms_only_triage_candidates(self) -> None:
         calls = []
@@ -269,10 +284,12 @@ class MockMatcherTests(unittest.TestCase):
             if payload["text"]["format"]["name"] == "job_unicorn_triage":
                 return {
                     "model": "gpt-5.4-mini-test",
+                    "usage": {"input_tokens": 500, "output_tokens": 50},
                     "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Rare domain overlap."}]}',
                 }
             return {
                 "model": "gpt-5.4-mini-test",
+                "usage": {"input_tokens": 300, "output_tokens": 30},
                 "output_text": '{"hit": true, "reason": "Confirmed rare fit."}',
             }
 
@@ -297,11 +314,16 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decisions[1]["reason"], "Rejected by first-stage OpenAI triage.")
         self.assertEqual(decisions[0]["triage_candidate_count"], 1)
         self.assertEqual(decisions[1]["triage_candidate_count"], 1)
+        self.assertEqual(decisions[0]["usage"], {"input_tokens": 300, "output_tokens": 30})
+        self.assertEqual(decisions[0]["triage_usage"], {"input_tokens": 500, "output_tokens": 50})
+        self.assertIsNone(decisions[1]["usage"])
+        self.assertEqual(decisions[1]["triage_usage"], {"input_tokens": 500, "output_tokens": 50})
 
     def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
         def fake_post(url, payload, headers):
             return {
                 "model": "gpt-5-nano-test",
+                "usage": {"input_tokens": 22, "output_tokens": 8},
                 "output_text": '{"hit": false, "reason": "Starts with S."}',
             }
 
@@ -320,6 +342,7 @@ class MockMatcherTests(unittest.TestCase):
                 "reason": "Starts with S.",
                 "matcher": "openai",
                 "model": "gpt-5-nano-test",
+                "usage": {"input_tokens": 22, "output_tokens": 8},
                 "raw_response": '{"hit": false, "reason": "Starts with S."}',
             },
         )
