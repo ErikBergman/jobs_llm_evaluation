@@ -3,9 +3,12 @@ name: Job Search
 on:
   workflow_dispatch:
   schedule:
-    # GitHub schedules are UTC. These four runs are gated below so the job
-    # actually executes at 07:00 and 19:00 Europe/Stockholm across CET/CEST.
-    - cron: "0 5,6,17,18 * * *"
+    # GitHub schedules are UTC. Separate entries let the gate decide from the
+    # intended cron hour instead of the delayed runner start time.
+    - cron: "0 5 * * *"
+    - cron: "0 6 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 18 * * *"
 
 concurrency:
   group: job-search
@@ -26,15 +29,27 @@ jobs:
         id: schedule_gate
         shell: bash
         run: |
-          local_hour="$(TZ=Europe/Stockholm date +%H)"
+          event_name="${{ github.event_name }}"
+          event_schedule="${{ github.event.schedule }}"
           local_time="$(TZ=Europe/Stockholm date '+%Y-%m-%d %H:%M:%S %Z')"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "$local_hour" == "07" || "$local_hour" == "19" ]]; then
+          if [[ "$event_name" == "workflow_dispatch" ]]; then
             echo "run_job=true" >> "$GITHUB_OUTPUT"
-            echo "Running job-search workflow at ${local_time}."
+            echo "Running manually triggered job-search workflow at ${local_time}."
+            exit 0
+          fi
+
+          cron_hour="$(awk '{print $2}' <<< "$event_schedule")"
+          utc_date="$(date -u +%Y-%m-%d)"
+          scheduled_local_hour="$(TZ=Europe/Stockholm date -d "${utc_date} ${cron_hour}:00 UTC" +%H)"
+          scheduled_local_time="$(TZ=Europe/Stockholm date -d "${utc_date} ${cron_hour}:00 UTC" '+%Y-%m-%d %H:%M %Z')"
+
+          if [[ "$scheduled_local_hour" == "07" || "$scheduled_local_hour" == "19" ]]; then
+            echo "run_job=true" >> "$GITHUB_OUTPUT"
+            echo "Running job-search workflow for scheduled local time ${scheduled_local_time}; runner started at ${local_time}."
           else
             echo "run_job=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping job-search workflow at ${local_time}; waiting for 07:00 or 19:00 Europe/Stockholm."
+            echo "Skipping cron ${event_schedule}; scheduled local time ${scheduled_local_time} is not 07:00 or 19:00 Europe/Stockholm. Runner started at ${local_time}."
           fi
 
       - name: Checkout
@@ -153,7 +168,7 @@ jobs:
             --job-profile "$JOB_PROFILE_PATH"
 
       - name: Send Telegram summary
-        if: steps.schedule_gate.outputs.run_job == 'true'
+        if: always() && steps.schedule_gate.outputs.run_job == 'true'
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}

@@ -79,3 +79,16 @@ results/discard/<timestamp>/linkedin_jobs_sample_match_metadata.json
 ```
 
 The workflow log also prints one `[decision]` line per job with the job ID, hit value, title, and reason.
+
+## Open-Source TODO
+
+Before making this repository public, remove or generalize the currently personalized code and data:
+
+- [ ] Remove tracked scraped job data from the repo and git history: [`results/discard/20260424_202129/linkedin_jobs_sample.json`](results/discard/20260424_202129/linkedin_jobs_sample.json#L1). It contains real LinkedIn job IDs, URLs, tracking parameters, locations, and full ad text.
+- [ ] Replace or remove the current personal search config: [`linkedin_search_input.json`](linkedin_search_input.json#L1). It currently contains a Lund-specific LinkedIn geo ID at [`linkedin_search_input.json:3`](linkedin_search_input.json#L3).
+- [ ] Make the template generic: [`linkedin_search_input.template.jsonc:4`](linkedin_search_input.template.jsonc#L4), [`linkedin_search_input.template.jsonc:11`](linkedin_search_input.template.jsonc#L11), [`linkedin_search_input.template.jsonc:12`](linkedin_search_input.template.jsonc#L12), and [`linkedin_search_input.template.jsonc:41`](linkedin_search_input.template.jsonc#L41) currently use Lund examples and `geoId=105734258`.
+- [ ] Keep private profile files out of the public repo. Local ignored files such as `job_profile.txt` and `job_profile.rtf` contain personal career data; `.gitignore` covers them at [`.gitignore:165`](.gitignore#L165) and [`.gitignore:166`](.gitignore#L166).
+- [ ] Generalize the GitHub Actions workflow: [`.github/workflows/job-search.yml:7`](.github/workflows/job-search.yml#L7), [`.github/workflows/job-search.yml:29`](.github/workflows/job-search.yml#L29), and [`.github/workflows/job-search.yml:37`](.github/workflows/job-search.yml#L37) hardcode `Europe/Stockholm` and 07:00/19:00 behavior; [`.github/workflows/job-search.yml:57`](.github/workflows/job-search.yml#L57) through [`.github/workflows/job-search.yml:85`](.github/workflows/job-search.yml#L85) are Koofr-specific.
+- [ ] Decide whether cheat mode should be renamed to a neutral sentinel test feature. Current implementation references are [`linkedin_guest_jobs.py:29`](linkedin_guest_jobs.py#L29), [`linkedin_guest_jobs.py:30`](linkedin_guest_jobs.py#L30), [`match_jobs.py:24`](match_jobs.py#L24), and [`match_jobs.py:748`](match_jobs.py#L748).
+- [ ] Make tests less profile-shaped: [`tests/test_linkedin_guest_jobs.py:28`](tests/test_linkedin_guest_jobs.py#L28), [`tests/test_linkedin_guest_jobs.py:174`](tests/test_linkedin_guest_jobs.py#L174), [`tests/test_match_jobs.py:102`](tests/test_match_jobs.py#L102), and [`tests/test_telegram_notify.py:99`](tests/test_telegram_notify.py#L99) contain Lund, cheat-job, or strongly profile-specific examples.
+- [ ] Clean git history before publishing. Historical commits include LinkedIn result data and old hardcoded search URLs; use `git filter-repo` or create a fresh public repository from a cleaned working tree.
