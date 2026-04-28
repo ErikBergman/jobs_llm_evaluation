@@ -2,8 +2,10 @@ import io
 import json
 import tempfile
 import unittest
+from contextlib import contextmanager
 from unittest import mock
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 from linkedin_guest_jobs import (
@@ -24,6 +26,15 @@ from linkedin_guest_jobs import (
     select_unseen_cards,
     sort_cards_by_latest_posted,
 )
+
+
+@contextmanager
+def raising_http_error(url: str, code: int, message: str):
+    error = HTTPError(url, code, message, hdrs=None, fp=None)
+    try:
+        yield error
+    finally:
+        error.close()
 
 
 class SearchUrlTests(unittest.TestCase):
@@ -276,6 +287,30 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertEqual([card.job_id for card in cards], ["newer", "duplicate", "older"])
+
+    def test_collect_unseen_cards_from_search_urls_skips_throttled_search(self) -> None:
+        def fake_fetch(url: str) -> str:
+            if "throttled" in url:
+                with raising_http_error(url, 429, "Too Many Requests") as error:
+                    raise error
+            return """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:newer">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """
+
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?keywords=throttled",
+                "https://www.linkedin.com/jobs/search-results/?keywords=engineer",
+            ],
+            limit=2,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["newer"])
 
     def test_collect_unseen_cards_paginates_until_limit_of_new_jobs(self) -> None:
         pages = {

@@ -14,6 +14,7 @@ from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Iterable
+from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
@@ -25,7 +26,7 @@ DEFAULT_INPUT_PATH = Path("linkedin_search_input.json")
 DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
-DEFAULT_MAX_SEARCH_PAGES = 10
+DEFAULT_MAX_SEARCH_PAGES = 2
 DEFAULT_CHEAT_AD_NAME = "cheat_mode_job_ad.rtf"
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
 RTF_DESTINATIONS = {
@@ -578,7 +579,14 @@ def collect_cards(
     cards: list[JobCard] = []
     start = 0
     for _ in range(max_pages):
-        page_cards = parse_search_results(fetch_html(guest_search_url(search_url, start=start)))
+        url = guest_search_url(search_url, start=start)
+        try:
+            page_cards = parse_search_results(fetch_html(url))
+        except HTTPError as error:
+            if error.code == 429:
+                print(f"Skipping throttled LinkedIn search page: {url}", file=sys.stderr)
+                break
+            raise
         if not page_cards:
             break
         cards.extend(page_cards)
