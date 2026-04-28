@@ -72,6 +72,33 @@ When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. T
 
 Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
 
+## GitHub Actions scheduling
+
+The `Job Search` workflow runs from `.github/workflows/job-search.yml`. It currently has two triggers:
+
+- `workflow_dispatch`, for manual runs from GitHub Actions.
+- `schedule` with `cron: "17 * * * *"`, for automatic hourly runs at minute 17.
+
+GitHub cron schedules are always interpreted in UTC. The workflow converts the scheduled UTC time to `Europe/Stockholm` before deciding whether to send a Telegram report. Scraping, matching, Koofr download, and Koofr upload run every scheduled hour; Telegram reporting is gated to scheduled local hours `07` and `19`.
+
+To customize the schedule:
+
+1. Change the cron expression under `on.schedule` in `.github/workflows/job-search.yml`.
+2. Change the report hours in the `Resolve schedule gates` step if Telegram summaries should be sent at different local hours.
+3. Change each `TZ=Europe/Stockholm` value in that step if the reporting gate should use a different local timezone.
+
+Examples:
+
+```yaml
+# Run every two hours at minute 17, still UTC.
+- cron: "17 */2 * * *"
+
+# Run at 06:17 and 18:17 UTC.
+- cron: "17 6,18 * * *"
+```
+
+Manual runs always enable Telegram reporting, regardless of the scheduled report hours.
+
 Each matching run writes an audit file next to the discard output:
 
 ```text
