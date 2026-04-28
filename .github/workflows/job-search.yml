@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
   schedule:
     # GitHub schedules are UTC. Separate entries let the gate decide from the
-    # intended cron hour instead of the delayed runner start time.
-    - cron: "0 5 * * *"
-    - cron: "0 6 * * *"
-    - cron: "0 17 * * *"
-    - cron: "0 18 * * *"
+    # intended cron time instead of the delayed runner start time. Avoid the
+    # top of the hour because GitHub scheduled workflows are often delayed then.
+    - cron: "17 5 * * *"
+    - cron: "17 6 * * *"
+    - cron: "17 17 * * *"
+    - cron: "17 18 * * *"
 
 concurrency:
   group: job-search
@@ -39,17 +40,19 @@ jobs:
             exit 0
           fi
 
+          cron_minute="$(awk '{print $1}' <<< "$event_schedule")"
           cron_hour="$(awk '{print $2}' <<< "$event_schedule")"
           utc_date="$(date -u +%Y-%m-%d)"
-          scheduled_local_hour="$(TZ=Europe/Stockholm date -d "${utc_date} ${cron_hour}:00 UTC" +%H)"
-          scheduled_local_time="$(TZ=Europe/Stockholm date -d "${utc_date} ${cron_hour}:00 UTC" '+%Y-%m-%d %H:%M %Z')"
+          scheduled_utc_time="${utc_date} ${cron_hour}:${cron_minute} UTC"
+          scheduled_local_hour="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" +%H)"
+          scheduled_local_time="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" '+%Y-%m-%d %H:%M %Z')"
 
           if [[ "$scheduled_local_hour" == "07" || "$scheduled_local_hour" == "19" ]]; then
             echo "run_job=true" >> "$GITHUB_OUTPUT"
             echo "Running job-search workflow for scheduled local time ${scheduled_local_time}; runner started at ${local_time}."
           else
             echo "run_job=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping cron ${event_schedule}; scheduled local time ${scheduled_local_time} is not 07:00 or 19:00 Europe/Stockholm. Runner started at ${local_time}."
+            echo "Skipping cron ${event_schedule}; scheduled local time ${scheduled_local_time} is not in the 07 or 19 Europe/Stockholm hour. Runner started at ${local_time}."
           fi
 
       - name: Checkout
