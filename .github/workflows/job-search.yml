@@ -16,7 +16,7 @@ jobs:
   search:
     runs-on: ubuntu-latest
     env:
-      ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '10' }}
+      ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '8' }}
       JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '2' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       CHEAT_MODE: ${{ vars.CHEAT_MODE || 'false' }}

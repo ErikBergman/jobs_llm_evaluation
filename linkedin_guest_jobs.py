@@ -730,7 +730,14 @@ def cheat_ad_path(results_root: Path, explicit_path: Path | None = None) -> Path
 def fetch_job_details(cards: Iterable[JobCard]) -> list[JobDetail]:
     jobs: list[JobDetail] = []
     for card in cards:
-        detail_html = fetch(GUEST_DETAIL_URL.format(job_id=card.job_id))
+        url = GUEST_DETAIL_URL.format(job_id=card.job_id)
+        try:
+            detail_html = fetch(url)
+        except HTTPError as error:
+            if error.code == 429:
+                print(f"Skipping throttled LinkedIn job detail: {url}", file=sys.stderr)
+                continue
+            raise
         jobs.append(parse_job_detail(detail_html, card))
     return jobs
 

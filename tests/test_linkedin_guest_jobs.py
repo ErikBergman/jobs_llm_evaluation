@@ -15,6 +15,7 @@ from linkedin_guest_jobs import (
     collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
     env_flag_enabled,
+    fetch_job_details,
     guest_search_url,
     load_cheat_job_ad,
     load_search_config,
@@ -402,6 +403,28 @@ class SearchUrlTests(unittest.TestCase):
 
         self.assertEqual(job.title, "Backend Python Integration Developer")
         self.assertEqual(job.description, "Build Python integrations.")
+
+    def test_fetch_job_details_skips_throttled_details(self) -> None:
+        cards = [JobCard("throttled"), JobCard("ok")]
+
+        def fake_fetch(url: str) -> str:
+            if "throttled" in url:
+                with raising_http_error(url, 429, "Too Many Requests") as error:
+                    raise error
+            return """
+                <html>
+                    <h2 class="top-card-layout__title">Backend Developer</h2>
+                    <a class="topcard__org-name-link">Example Company</a>
+                    <span class="posted-time-ago__text">9 minutes ago</span>
+                    <div class="show-more-less-html__markup">Build APIs.</div>
+                </html>
+            """
+
+        with mock.patch("linkedin_guest_jobs.fetch", side_effect=fake_fetch):
+            jobs = fetch_job_details(cards)
+
+        self.assertEqual([job.job_id for job in jobs], ["ok"])
+        self.assertEqual(jobs[0].title, "Backend Developer")
 
     def test_main_writes_cheat_job_even_when_no_public_cards_are_found(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
