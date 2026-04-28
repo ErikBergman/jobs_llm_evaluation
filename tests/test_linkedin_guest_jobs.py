@@ -388,7 +388,7 @@ class SearchUrlTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch("linkedin_guest_jobs.collect_unseen_cards", return_value=[]):
+            with mock.patch("linkedin_guest_jobs.collect_unseen_cards_from_search_urls", return_value=[]):
                 with mock.patch.dict("os.environ", {"CHEAT_MODE": "true"}, clear=False):
                     with mock.patch("sys.stdout", new_callable=io.StringIO):
                         with mock.patch(
