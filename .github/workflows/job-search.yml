@@ -3,13 +3,10 @@ name: Job Search
 on:
   workflow_dispatch:
   schedule:
-    # GitHub schedules are UTC. Separate entries let the gate decide from the
-    # intended cron time instead of the delayed runner start time. Avoid the
-    # top of the hour because GitHub scheduled workflows are often delayed then.
-    - cron: "17 5 * * *"
-    - cron: "17 6 * * *"
-    - cron: "17 17 * * *"
-    - cron: "17 18 * * *"
+    # GitHub schedules are UTC. Run hourly at :17 to avoid the busiest
+    # top-of-hour scheduler window; the report gate below uses the intended
+    # schedule time, not the delayed runner start time.
+    - cron: "17 * * * *"
 
 concurrency:
   group: job-search
@@ -26,7 +23,7 @@ jobs:
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
       RUNTIME_RESULTS_DIR: runtime_results
     steps:
-      - name: Check local schedule window
+      - name: Resolve schedule gates
         id: schedule_gate
         shell: bash
         run: |
@@ -36,7 +33,8 @@ jobs:
 
           if [[ "$event_name" == "workflow_dispatch" ]]; then
             echo "run_job=true" >> "$GITHUB_OUTPUT"
-            echo "Running manually triggered job-search workflow at ${local_time}."
+            echo "report_job=true" >> "$GITHUB_OUTPUT"
+            echo "Running manually triggered job-search workflow with reporting at ${local_time}."
             exit 0
           fi
 
@@ -47,12 +45,15 @@ jobs:
           scheduled_local_hour="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" +%H)"
           scheduled_local_time="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" '+%Y-%m-%d %H:%M %Z')"
 
+          echo "run_job=true" >> "$GITHUB_OUTPUT"
+          echo "Running hourly job-search workflow for scheduled local time ${scheduled_local_time}; runner started at ${local_time}."
+
           if [[ "$scheduled_local_hour" == "07" || "$scheduled_local_hour" == "19" ]]; then
-            echo "run_job=true" >> "$GITHUB_OUTPUT"
-            echo "Running job-search workflow for scheduled local time ${scheduled_local_time}; runner started at ${local_time}."
+            echo "report_job=true" >> "$GITHUB_OUTPUT"
+            echo "Telegram reporting is enabled for this scheduled local hour."
           else
-            echo "run_job=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping cron ${event_schedule}; scheduled local time ${scheduled_local_time} is not in the 07 or 19 Europe/Stockholm hour. Runner started at ${local_time}."
+            echo "report_job=false" >> "$GITHUB_OUTPUT"
+            echo "Telegram reporting is skipped; scheduled local time ${scheduled_local_time} is not in the 07 or 19 Europe/Stockholm hour."
           fi
 
       - name: Checkout
@@ -171,7 +172,7 @@ jobs:
             --job-profile "$JOB_PROFILE_PATH"
 
       - name: Send Telegram summary
-        if: always() && steps.schedule_gate.outputs.run_job == 'true'
+        if: always() && steps.schedule_gate.outputs.report_job == 'true'
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}
