@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from html import unescape
@@ -27,6 +28,7 @@ DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
 DEFAULT_MAX_SEARCH_PAGES = 2
+DEFAULT_REQUEST_DELAY_SECONDS = 0.0
 DEFAULT_CHEAT_AD_NAME = "cheat_mode_job_ad.rtf"
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
 RTF_DESTINATIONS = {
@@ -485,6 +487,11 @@ def fetch(url: str) -> str:
         return response.read().decode("utf-8", "replace")
 
 
+def sleep_before_request(delay_seconds: float) -> None:
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
+
+
 def parse_search_results(html: str) -> list[JobCard]:
     parser = SearchResultsParser()
     parser.feed(html)
@@ -574,6 +581,7 @@ def sort_cards_by_latest_posted(cards: Iterable[JobCard]) -> list[JobCard]:
 def collect_cards(
     search_url: str,
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
 ) -> list[JobCard]:
     cards: list[JobCard] = []
@@ -581,6 +589,7 @@ def collect_cards(
     for _ in range(max_pages):
         url = guest_search_url(search_url, start=start)
         try:
+            sleep_before_request(request_delay_seconds)
             page_cards = parse_search_results(fetch_html(url))
         except HTTPError as error:
             if error.code == 429:
@@ -599,11 +608,17 @@ def collect_unseen_cards(
     limit: int,
     seen_job_ids: set[str],
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
 ) -> list[JobCard]:
     if limit <= 0:
         return []
-    cards = collect_cards(search_url, max_pages=max_pages, fetch_html=fetch_html)
+    cards = collect_cards(
+        search_url,
+        max_pages=max_pages,
+        request_delay_seconds=request_delay_seconds,
+        fetch_html=fetch_html,
+    )
     return select_unseen_cards(sort_cards_by_latest_posted(cards), seen_job_ids, limit)
 
 
@@ -612,6 +627,7 @@ def collect_unseen_cards_from_search_urls(
     limit: int,
     seen_job_ids: set[str],
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
 ) -> list[JobCard]:
     if limit <= 0:
@@ -619,7 +635,12 @@ def collect_unseen_cards_from_search_urls(
 
     cards_by_id: dict[str, JobCard] = {}
     for search_url in search_urls:
-        for card in collect_cards(search_url, max_pages=max_pages, fetch_html=fetch_html):
+        for card in collect_cards(
+            search_url,
+            max_pages=max_pages,
+            request_delay_seconds=request_delay_seconds,
+            fetch_html=fetch_html,
+        ):
             cards_by_id.setdefault(card.job_id, card)
     return select_unseen_cards(sort_cards_by_latest_posted(cards_by_id.values()), seen_job_ids, limit)
 
@@ -727,11 +748,15 @@ def cheat_ad_path(results_root: Path, explicit_path: Path | None = None) -> Path
     return results_root / DEFAULT_CHEAT_AD_NAME
 
 
-def fetch_job_details(cards: Iterable[JobCard]) -> list[JobDetail]:
+def fetch_job_details(
+    cards: Iterable[JobCard],
+    request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
+) -> list[JobDetail]:
     jobs: list[JobDetail] = []
     for card in cards:
         url = GUEST_DETAIL_URL.format(job_id=card.job_id)
         try:
+            sleep_before_request(request_delay_seconds)
             detail_html = fetch(url)
         except HTTPError as error:
             if error.code == 429:
@@ -755,6 +780,12 @@ def main() -> int:
     parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT, help="Results memory root")
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_SEARCH_PAGES, help="Maximum search pages to scan")
     parser.add_argument(
+        "--request-delay",
+        type=float,
+        default=float(os.environ.get("JOB_SEARCH_REQUEST_DELAY", DEFAULT_REQUEST_DELAY_SECONDS)),
+        help="Seconds to wait before each LinkedIn request",
+    )
+    parser.add_argument(
         "--cheat-ad",
         type=Path,
         default=None,
@@ -764,8 +795,14 @@ def main() -> int:
 
     search_urls = search_urls_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
-    cards = collect_unseen_cards_from_search_urls(search_urls, args.limit, seen_job_ids, max_pages=args.max_pages)
-    jobs = fetch_job_details(cards)
+    cards = collect_unseen_cards_from_search_urls(
+        search_urls,
+        args.limit,
+        seen_job_ids,
+        max_pages=args.max_pages,
+        request_delay_seconds=args.request_delay,
+    )
+    jobs = fetch_job_details(cards, request_delay_seconds=args.request_delay)
     if env_flag_enabled("CHEAT_MODE"):
         jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))
 

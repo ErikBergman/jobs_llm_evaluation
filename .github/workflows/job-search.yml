@@ -18,6 +18,8 @@ jobs:
     env:
       ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '8' }}
       JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '2' }}
+      JOB_SEARCH_REQUEST_DELAY: ${{ vars.JOB_SEARCH_REQUEST_DELAY || '2' }}
+      JOB_SEARCH_EFFECTIVE_LIMIT: ${{ vars.JOB_SEARCH_EFFECTIVE_LIMIT || '8' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       CHEAT_MODE: ${{ vars.CHEAT_MODE || 'false' }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
@@ -131,13 +133,23 @@ jobs:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           ENTRIES_NUMBER_LIMIT: ${{ env.ENTRIES_NUMBER_LIMIT }}
           JOB_SEARCH_MAX_PAGES: ${{ env.JOB_SEARCH_MAX_PAGES }}
+          JOB_SEARCH_REQUEST_DELAY: ${{ env.JOB_SEARCH_REQUEST_DELAY }}
+          JOB_SEARCH_EFFECTIVE_LIMIT: ${{ env.JOB_SEARCH_EFFECTIVE_LIMIT }}
         shell: bash
         run: |
+          effective_limit="${ENTRIES_NUMBER_LIMIT}"
+          max_effective_limit="${JOB_SEARCH_EFFECTIVE_LIMIT:-8}"
+          if (( effective_limit > max_effective_limit )); then
+            echo "Capping scrape limit from ${effective_limit} to ${max_effective_limit} to avoid LinkedIn throttling."
+            effective_limit="${max_effective_limit}"
+          fi
+
           set +e
           python3 linkedin_guest_jobs.py \
             --results-root "${RUNTIME_RESULTS_DIR}" \
-            --limit "${ENTRIES_NUMBER_LIMIT}" \
+            --limit "${effective_limit}" \
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
+            --request-delay "${JOB_SEARCH_REQUEST_DELAY}" \
             --output linkedin_jobs_sample.json 2>&1 | tee scrape.log
           scrape_status="${PIPESTATUS[0]}"
           set -e
