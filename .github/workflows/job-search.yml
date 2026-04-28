@@ -118,9 +118,10 @@ jobs:
 
           import linkedin_guest_jobs as jobs
 
-          search_url = jobs.search_url_from_config(jobs.load_search_config(Path("linkedin_search_input.json")))
-          print(f"LinkedIn search URL: {search_url}")
-          print(f"LinkedIn guest search URL: {jobs.guest_search_url(search_url)}")
+          search_urls = jobs.search_urls_from_config(jobs.load_search_config(Path("linkedin_search_input.json")))
+          for index, search_url in enumerate(search_urls, start=1):
+              print(f"LinkedIn search URL {index}: {search_url}")
+              print(f"LinkedIn guest search URL {index}: {jobs.guest_search_url(search_url)}")
           PY
 
       - name: Scrape new jobs

@@ -1,7 +1,143 @@
 {
-  "keywords": "engineer in lund",
-  "geo_id": "105734258",
-  "distance": "0.0",
-  "date_posted": "r86400",
-  "sort_by": "DD"
+  "searches": [
+    {
+      "keywords": "python backend",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "integration engineer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "automation engineer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "systems integration",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "internal tools",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "data pipeline",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "application engineer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "process engineer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "technical specialist",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "solutions engineer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "technical trainer",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "developer advocate",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "applied AI",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "workflow automation",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "biotech",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "life science",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "laboratory systems",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "LIMS",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "keywords": "process development",
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    },
+    {
+      "geo_id": "105734258",
+      "distance": "0.0",
+      "date_posted": "r86400",
+      "sort_by": "DD"
+    }
+  ]
 }

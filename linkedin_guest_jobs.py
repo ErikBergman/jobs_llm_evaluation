@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -434,10 +434,31 @@ def search_url_from_config(config: dict[str, object]) -> str:
             if value not in (None, "", []):
                 params[str(key)] = normalize_query_value(value)
 
-    if "keywords" not in params and "location" not in params:
-        raise ValueError("Input JSON must contain search_url, keywords/search_terms, or location")
+    if not any(key in params for key in ("keywords", "location", "geoId", "f_PP")):
+        raise ValueError("Input JSON must contain search_url, keywords/search_terms, location, geo_id, or place_ids")
 
     return f"{LINKEDIN_SEARCH_URL}?{urlencode(params)}"
+
+
+def search_configs_from_config(config: dict[str, object]) -> list[dict[str, object]]:
+    searches = config.get("searches")
+    if searches in (None, "", []):
+        return [config]
+    if not isinstance(searches, list):
+        raise ValueError("searches must be a list of search config objects")
+    if not searches:
+        raise ValueError("searches must contain at least one search config")
+
+    configs: list[dict[str, object]] = []
+    for index, search_config in enumerate(searches, start=1):
+        if not isinstance(search_config, dict):
+            raise ValueError(f"searches[{index}] must be a search config object")
+        configs.append(search_config)
+    return configs
+
+
+def search_urls_from_config(config: dict[str, object]) -> list[str]:
+    return [search_url_from_config(search_config) for search_config in search_configs_from_config(config)]
 
 
 def guest_search_url(search_url: str, start: int = 0) -> str:
@@ -511,6 +532,60 @@ def select_unseen_cards(cards: Iterable[JobCard], seen_job_ids: set[str], limit:
     return selected
 
 
+def posted_sort_key(card: JobCard) -> tuple[int, int]:
+    posted = card.posted.strip().lower()
+    if posted in {"just now", "now"}:
+        return (0, 0)
+
+    relative_match = re.search(r"(\d+)\s+(minute|minutes|hour|hours|day|days|week|weeks|month|months)", posted)
+    if relative_match:
+        value = int(relative_match.group(1))
+        unit = relative_match.group(2)
+        multipliers = {
+            "minute": 1,
+            "minutes": 1,
+            "hour": 60,
+            "hours": 60,
+            "day": 24 * 60,
+            "days": 24 * 60,
+            "week": 7 * 24 * 60,
+            "weeks": 7 * 24 * 60,
+            "month": 30 * 24 * 60,
+            "months": 30 * 24 * 60,
+        }
+        return (0, value * multipliers[unit])
+
+    if card.posted_date:
+        try:
+            posted_day = date.fromisoformat(card.posted_date)
+            days_ago = max((date.today() - posted_day).days, 0)
+            return (1, days_ago)
+        except ValueError:
+            pass
+
+    return (2, 0)
+
+
+def sort_cards_by_latest_posted(cards: Iterable[JobCard]) -> list[JobCard]:
+    return sorted(cards, key=posted_sort_key)
+
+
+def collect_cards(
+    search_url: str,
+    max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    fetch_html: Callable[[str], str] = fetch,
+) -> list[JobCard]:
+    cards: list[JobCard] = []
+    start = 0
+    for _ in range(max_pages):
+        page_cards = parse_search_results(fetch_html(guest_search_url(search_url, start=start)))
+        if not page_cards:
+            break
+        cards.extend(page_cards)
+        start += len(page_cards)
+    return cards
+
+
 def collect_unseen_cards(
     search_url: str,
     limit: int,
@@ -520,17 +595,25 @@ def collect_unseen_cards(
 ) -> list[JobCard]:
     if limit <= 0:
         return []
-    selected: list[JobCard] = []
-    start = 0
-    for _ in range(max_pages):
-        page_cards = parse_search_results(fetch_html(guest_search_url(search_url, start=start)))
-        if not page_cards:
-            break
-        selected.extend(select_unseen_cards(page_cards, seen_job_ids, limit - len(selected)))
-        if len(selected) >= limit:
-            break
-        start += len(page_cards)
-    return selected
+    cards = collect_cards(search_url, max_pages=max_pages, fetch_html=fetch_html)
+    return select_unseen_cards(sort_cards_by_latest_posted(cards), seen_job_ids, limit)
+
+
+def collect_unseen_cards_from_search_urls(
+    search_urls: Iterable[str],
+    limit: int,
+    seen_job_ids: set[str],
+    max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    fetch_html: Callable[[str], str] = fetch,
+) -> list[JobCard]:
+    if limit <= 0:
+        return []
+
+    cards_by_id: dict[str, JobCard] = {}
+    for search_url in search_urls:
+        for card in collect_cards(search_url, max_pages=max_pages, fetch_html=fetch_html):
+            cards_by_id.setdefault(card.job_id, card)
+    return select_unseen_cards(sort_cards_by_latest_posted(cards_by_id.values()), seen_job_ids, limit)
 
 
 def extract_description(html: str) -> str:
@@ -664,9 +747,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    search_url = search_url_from_config(load_search_config(args.input))
+    search_urls = search_urls_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
-    cards = collect_unseen_cards(search_url, args.limit, seen_job_ids, max_pages=args.max_pages)
+    cards = collect_unseen_cards_from_search_urls(search_urls, args.limit, seen_job_ids, max_pages=args.max_pages)
     jobs = fetch_job_details(cards)
     if env_flag_enabled("CHEAT_MODE"):
         jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))

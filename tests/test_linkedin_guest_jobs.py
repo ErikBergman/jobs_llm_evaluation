@@ -10,6 +10,7 @@ from linkedin_guest_jobs import (
     CHEAT_JOB_ID,
     GUEST_SEARCH_URL,
     JobCard,
+    collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
     env_flag_enabled,
     guest_search_url,
@@ -19,7 +20,9 @@ from linkedin_guest_jobs import (
     main,
     parse_cheat_job_ad,
     search_url_from_config,
+    search_urls_from_config,
     select_unseen_cards,
+    sort_cards_by_latest_posted,
 )
 
 
@@ -83,6 +86,40 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(query["f_TPR"], ["r86400"])
         self.assertEqual(query["start"], ["0"])
 
+    def test_constructs_geo_only_search_url(self) -> None:
+        search_url = search_url_from_config(
+            {
+                "geo_id": "105734258",
+                "distance": "0.0",
+                "date_posted": "r86400",
+                "sort_by": "DD",
+            }
+        )
+
+        parsed = urlparse(search_url)
+        query = parse_qs(parsed.query)
+
+        self.assertNotIn("keywords", query)
+        self.assertEqual(query["geoId"], ["105734258"])
+        self.assertEqual(query["distance"], ["0.0"])
+        self.assertEqual(query["f_TPR"], ["r86400"])
+        self.assertEqual(query["sortBy"], ["DD"])
+
+    def test_search_urls_from_config_supports_multiple_searches(self) -> None:
+        search_urls = search_urls_from_config(
+            {
+                "searches": [
+                    {"keywords": "engineer", "geo_id": "105734258"},
+                    {"geo_id": "105734258", "date_posted": "r86400"},
+                ]
+            }
+        )
+
+        self.assertEqual(len(search_urls), 2)
+        self.assertIn("keywords=engineer", search_urls[0])
+        self.assertNotIn("keywords=", search_urls[1])
+        self.assertIn("geoId=105734258", search_urls[1])
+
     def test_loads_jsonc_template_style_comments(self) -> None:
         content = """
         {
@@ -127,6 +164,118 @@ class SearchUrlTests(unittest.TestCase):
 
         self.assertEqual([card.job_id for card in selected], ["new-1", "new-2"])
         self.assertEqual(seen_job_ids, {"seen", "new-1", "new-2"})
+
+    def test_sort_cards_by_latest_posted_prefers_relative_age(self) -> None:
+        cards = [
+            JobCard("day-old", posted="1 day ago", posted_date="2026-04-27"),
+            JobCard("minutes-old", posted="22 minutes ago", posted_date="2026-04-28"),
+            JobCard("hours-old", posted="18 hours ago", posted_date="2026-04-27"),
+            JobCard("newer-minutes-old", posted="9 minutes ago", posted_date="2026-04-28"),
+        ]
+
+        sorted_cards = sort_cards_by_latest_posted(cards)
+
+        self.assertEqual(
+            [card.job_id for card in sorted_cards],
+            ["newer-minutes-old", "minutes-old", "hours-old", "day-old"],
+        )
+
+    def test_collect_unseen_cards_sorts_page_before_applying_limit(self) -> None:
+        pages = {
+            "start=0": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:older">
+                    <time class="job-search-card__listdate" datetime="2026-04-27">1 day ago</time>
+                </div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:newer">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """,
+        }
+
+        def fake_fetch(url: str) -> str:
+            for marker, html in pages.items():
+                if marker in url:
+                    return html
+            return ""
+
+        cards = collect_unseen_cards(
+            "https://www.linkedin.com/jobs/search-results/?keywords=engineer",
+            limit=1,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["newer"])
+
+    def test_collect_unseen_cards_sorts_all_pages_before_applying_limit(self) -> None:
+        pages = {
+            "start=0": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:older">
+                    <time class="job-search-card__listdate" datetime="2026-04-27">1 day ago</time>
+                </div>
+            """,
+            "start=1": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:newer">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """,
+        }
+
+        def fake_fetch(url: str) -> str:
+            for marker, html in pages.items():
+                if marker in url:
+                    return html
+            return ""
+
+        cards = collect_unseen_cards(
+            "https://www.linkedin.com/jobs/search-results/?keywords=engineer",
+            limit=1,
+            seen_job_ids=set(),
+            max_pages=2,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["newer"])
+
+    def test_collect_unseen_cards_from_search_urls_dedupes_and_sorts_all_searches(self) -> None:
+        pages = {
+            "keywords=engineer": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:older">
+                    <time class="job-search-card__listdate" datetime="2026-04-27">1 day ago</time>
+                </div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:duplicate">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">20 minutes ago</time>
+                </div>
+            """,
+            "geoId=105734258": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:duplicate">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">20 minutes ago</time>
+                </div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:newer">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """,
+        }
+
+        def fake_fetch(url: str) -> str:
+            for marker, html in pages.items():
+                if marker in url:
+                    return html
+            return ""
+
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?keywords=engineer",
+                "https://www.linkedin.com/jobs/search-results/?geoId=105734258",
+            ],
+            limit=3,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["newer", "duplicate", "older"])
 
     def test_collect_unseen_cards_paginates_until_limit_of_new_jobs(self) -> None:
         pages = {
