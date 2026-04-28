@@ -109,6 +109,20 @@ jobs:
           python3 -m unittest
           python3 -m py_compile linkedin_guest_jobs.py match_jobs.py telegram_notify.py
 
+      - name: Generating search url
+        if: steps.schedule_gate.outputs.run_job == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          import linkedin_guest_jobs as jobs
+
+          search_url = jobs.search_url_from_config(jobs.load_search_config(Path("linkedin_search_input.json")))
+          print(f"LinkedIn search URL: {search_url}")
+          print(f"LinkedIn guest search URL: {jobs.guest_search_url(search_url)}")
+          PY
+
       - name: Scrape new jobs
         if: steps.schedule_gate.outputs.run_job == 'true'
         id: scrape
