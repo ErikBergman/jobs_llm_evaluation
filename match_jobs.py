@@ -20,12 +20,14 @@ ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 256
+DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
 OPENAI_TRIAGE_BASE_OUTPUT_TOKENS = 160
-OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 80
+OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 120
 OPENAI_TRIAGE_MIN_OUTPUT_TOKENS = 256
-OPENAI_TRIAGE_MAX_OUTPUT_TOKENS = 1024
+OPENAI_TRIAGE_MAX_OUTPUT_TOKENS = 2048
+OPENAI_STRUCTURED_JSON_REASONING_EFFORT = "low"
+OPENAI_RETRY_MAX_OUTPUT_TOKENS = 4096
 DEFAULT_JOB_PROFILE_PATH = Path("job_profile.txt")
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 RTF_DESTINATIONS = {
@@ -395,29 +397,41 @@ def call_openai_structured_json(
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required when --matcher openai is used")
 
-    payload = {
-        "model": model,
-        "input": prompt,
-        "reasoning": {"effort": "medium"},
-        "text": {
-            "verbosity": "low",
-            "format": {
-                "type": "json_schema",
-                "name": schema_name,
-                "strict": True,
-                "schema": schema,
-            }
-        },
-        "max_output_tokens": max_output_tokens,
-    }
-    if prompt_cache_key:
-        payload["prompt_cache_key"] = prompt_cache_key
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    response_payload = (post_json or post_json_to_api)(OPENAI_RESPONSES_URL, payload, headers)
+
+    def request_structured_json(output_tokens: int) -> dict[str, Any]:
+        payload = {
+            "model": model,
+            "input": prompt,
+            "reasoning": {"effort": OPENAI_STRUCTURED_JSON_REASONING_EFFORT},
+            "text": {
+                "verbosity": "low",
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": schema,
+                }
+            },
+            "max_output_tokens": output_tokens,
+        }
+        if prompt_cache_key:
+            payload["prompt_cache_key"] = prompt_cache_key
+        return (post_json or post_json_to_api)(OPENAI_RESPONSES_URL, payload, headers)
+
+    response_payload = request_structured_json(max_output_tokens)
     response_text = extract_response_text(response_payload)
+    if (
+        not response_text
+        and response_payload.get("incomplete_details", {}).get("reason") == "max_output_tokens"
+        and max_output_tokens < OPENAI_RETRY_MAX_OUTPUT_TOKENS
+    ):
+        retry_output_tokens = min(max_output_tokens * 2, OPENAI_RETRY_MAX_OUTPUT_TOKENS)
+        response_payload = request_structured_json(retry_output_tokens)
+        response_text = extract_response_text(response_payload)
     if not response_text:
         raise ValueError(f"OpenAI response did not include output text: {summarize_response_shape(response_payload)}")
     return response_payload, response_text

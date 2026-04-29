@@ -13,6 +13,7 @@ from match_jobs import (
     OPENAI_TRIAGE_MIN_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
     assert_cheat_mode_language_model_hit,
+    call_openai_structured_json,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
     call_openai_unicorn_decision,
@@ -85,8 +86,8 @@ class MockMatcherTests(unittest.TestCase):
 
     def test_triage_max_output_tokens_scales_with_job_count(self) -> None:
         self.assertEqual(triage_max_output_tokens(0), OPENAI_TRIAGE_MIN_OUTPUT_TOKENS)
-        self.assertEqual(triage_max_output_tokens(1), OPENAI_TRIAGE_MIN_OUTPUT_TOKENS)
-        self.assertEqual(triage_max_output_tokens(5), 560)
+        self.assertEqual(triage_max_output_tokens(1), 280)
+        self.assertEqual(triage_max_output_tokens(5), 760)
         self.assertEqual(triage_max_output_tokens(100), OPENAI_TRIAGE_MAX_OUTPUT_TOKENS)
 
     def test_rtf_to_text_ignores_rtf_metadata(self) -> None:
@@ -219,13 +220,40 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(url, OPENAI_RESPONSES_URL)
         self.assertEqual(payload["model"], DEFAULT_OPENAI_MODEL)
         self.assertIn("Job title: Engineer", payload["input"])
-        self.assertEqual(payload["reasoning"], {"effort": "medium"})
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
         self.assertEqual(payload["text"]["verbosity"], "low")
         self.assertEqual(payload["text"]["format"]["type"], "json_schema")
         self.assertEqual(set(payload["text"]["format"]["schema"]["required"]), {"hit", "reason"})
         self.assertEqual(payload["max_output_tokens"], DEFAULT_OPENAI_MAX_OUTPUT_TOKENS)
         self.assertNotIn("prompt_cache_key", payload)
         self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_openai_structured_json_retries_when_output_tokens_are_exhausted(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append((url, payload, headers))
+            if len(calls) == 1:
+                return {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}, "output": []}
+            return {"output_text": '{"hit": false, "reason": "Retry succeeded."}'}
+
+        response_payload, response_text = call_openai_structured_json(
+            "test-key",
+            "Classify this job.",
+            "job_unicorn_match",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"hit": {"type": "boolean"}, "reason": {"type": "string"}},
+                "required": ["hit", "reason"],
+            },
+            max_output_tokens=10,
+            post_json=fake_post,
+        )
+
+        self.assertEqual([call[1]["max_output_tokens"] for call in calls], [10, 20])
+        self.assertEqual(response_payload["output_text"], '{"hit": false, "reason": "Retry succeeded."}')
+        self.assertEqual(response_text, '{"hit": false, "reason": "Retry succeeded."}')
 
     def test_openai_unicorn_decision_posts_profile_based_request_without_network(self) -> None:
         calls = []
