@@ -12,10 +12,12 @@ from linkedin_guest_jobs import (
     CHEAT_JOB_ID,
     GUEST_SEARCH_URL,
     JobCard,
+    SearchAudit,
     collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
     env_flag_enabled,
     fetch_job_details,
+    format_search_audit_table,
     guest_search_url,
     load_cheat_job_ad,
     load_search_config,
@@ -25,6 +27,7 @@ from linkedin_guest_jobs import (
     search_url_from_config,
     search_urls_from_config,
     select_unseen_cards,
+    search_label,
     sort_cards_by_latest_posted,
 )
 
@@ -312,6 +315,58 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertEqual([card.job_id for card in cards], ["newer"])
+
+    def test_collect_unseen_cards_from_search_urls_records_search_audits(self) -> None:
+        def fake_fetch(url: str) -> str:
+            if "keywords=throttled" in url:
+                with raising_http_error(url, 429, "Too Many Requests") as error:
+                    raise error
+            return """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:newer">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:older">
+                    <time class="job-search-card__listdate" datetime="2026-04-27">1 day ago</time>
+                </div>
+            """
+
+        audits: list[SearchAudit] = []
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?keywords=throttled",
+                "https://www.linkedin.com/jobs/search-results/?keywords=life+science",
+            ],
+            limit=2,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+            audits=audits,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["newer", "older"])
+        self.assertEqual(
+            audits,
+            [
+                SearchAudit(search="throttled", pages_requested=1, results_seen=0, throttled=True),
+                SearchAudit(search="life science", pages_requested=1, results_seen=2, throttled=False),
+            ],
+        )
+
+    def test_search_audit_table_renders_ascii_summary(self) -> None:
+        table = format_search_audit_table(
+            [
+                SearchAudit(search="developer", pages_requested=2, results_seen=10, throttled=False),
+                SearchAudit(search="life science", pages_requested=1, results_seen=0, throttled=True),
+            ]
+        )
+
+        self.assertIn("Search audit", table)
+        self.assertIn("| developer    | 2     | 10                | no        |", table)
+        self.assertIn("| life science | 1     | 0                 | yes       |", table)
+
+    def test_search_label_uses_keywords_or_geo_id(self) -> None:
+        self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?keywords=life+science"), "life science")
+        self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?geoId=105734258"), "geoId=105734258")
 
     def test_collect_unseen_cards_paginates_until_limit_of_new_jobs(self) -> None:
         pages = {

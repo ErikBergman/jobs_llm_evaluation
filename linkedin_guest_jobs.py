@@ -81,6 +81,14 @@ class JobDetail(JobCard):
     description: str = ""
 
 
+@dataclass
+class SearchAudit:
+    search: str
+    pages_requested: int = 0
+    results_seen: int = 0
+    throttled: bool = False
+
+
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(value)).strip()
 
@@ -579,26 +587,42 @@ def sort_cards_by_latest_posted(cards: Iterable[JobCard]) -> list[JobCard]:
     return sorted(cards, key=posted_sort_key)
 
 
+def search_label(search_url: str) -> str:
+    params = dict(parse_qsl(urlparse(search_url).query))
+    keywords = params.get("keywords", "").strip()
+    if keywords:
+        return keywords
+    geo_id = params.get("geoId", "").strip()
+    return f"geoId={geo_id}" if geo_id else search_url
+
+
 def collect_cards(
     search_url: str,
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
     request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
+    audit: SearchAudit | None = None,
 ) -> list[JobCard]:
     cards: list[JobCard] = []
     start = 0
     for _ in range(max_pages):
         url = guest_search_url(search_url, start=start)
+        if audit is not None:
+            audit.pages_requested += 1
         try:
             sleep_before_request(request_delay_seconds)
             page_cards = parse_search_results(fetch_html(url))
         except HTTPError as error:
             if error.code == 429:
+                if audit is not None:
+                    audit.throttled = True
                 print(f"Skipping throttled LinkedIn search page: {url}", file=sys.stderr)
                 break
             raise
         if not page_cards:
             break
+        if audit is not None:
+            audit.results_seen += len(page_cards)
         cards.extend(page_cards)
         start += len(page_cards)
     return cards
@@ -630,20 +654,48 @@ def collect_unseen_cards_from_search_urls(
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
     request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
+    audits: list[SearchAudit] | None = None,
 ) -> list[JobCard]:
     if limit <= 0:
         return []
 
     cards_by_id: dict[str, JobCard] = {}
     for search_url in search_urls:
+        audit = SearchAudit(search=search_label(search_url))
+        if audits is not None:
+            audits.append(audit)
         for card in collect_cards(
             search_url,
             max_pages=max_pages,
             request_delay_seconds=request_delay_seconds,
             fetch_html=fetch_html,
+            audit=audit,
         ):
             cards_by_id.setdefault(card.job_id, card)
     return select_unseen_cards(sort_cards_by_latest_posted(cards_by_id.values()), seen_job_ids, limit)
+
+
+def format_search_audit_table(audits: Iterable[SearchAudit]) -> str:
+    rows = [
+        (audit.search, str(audit.pages_requested), str(audit.results_seen), "yes" if audit.throttled else "no")
+        for audit in audits
+    ]
+    headers = ("Search", "Pages", "Results looked at", "Throttled")
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows)) if rows else len(headers[index])
+        for index in range(len(headers))
+    ]
+
+    def border() -> str:
+        return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+    def render_row(values: tuple[str, str, str, str]) -> str:
+        return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(values)) + " |"
+
+    lines = ["Search audit", border(), render_row(headers), border()]
+    lines.extend(render_row(row) for row in rows)
+    lines.append(border())
+    return "\n".join(lines)
 
 
 def extract_description(html: str) -> str:
@@ -806,18 +858,21 @@ def main() -> int:
 
     search_urls = search_urls_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
+    search_audits: list[SearchAudit] = []
     cards = collect_unseen_cards_from_search_urls(
         search_urls,
         args.limit,
         seen_job_ids,
         max_pages=args.max_pages,
         request_delay_seconds=args.request_delay,
+        audits=search_audits,
     )
     jobs = fetch_job_details(cards, request_delay_seconds=args.request_delay)
     if env_flag_enabled("CHEAT_MODE"):
         jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))
 
     if not jobs:
+        print(format_search_audit_table(search_audits))
         print("No new public job cards found.", file=sys.stderr)
         return 1
 
@@ -829,6 +884,7 @@ def main() -> int:
 
     print(f"Wrote {output_path}")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(format_search_audit_table(search_audits))
     return 0
 
 
