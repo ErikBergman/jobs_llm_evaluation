@@ -105,7 +105,7 @@ jobs:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
         shell: bash
         run: |
-          mkdir -p "${RUNTIME_RESULTS_DIR}/discard" "${RUNTIME_RESULTS_DIR}/hits"
+          mkdir -p "${RUNTIME_RESULTS_DIR}/discard" "${RUNTIME_RESULTS_DIR}/hits" "${RUNTIME_RESULTS_DIR}/waiting_room"
           rclone copy "koofr:${KOOFR_PATH}" "${RUNTIME_RESULTS_DIR}" --create-empty-src-dirs
 
       - name: Run tests
@@ -150,6 +150,7 @@ jobs:
           set +e
           python3 linkedin_guest_jobs.py \
             --results-root "${RUNTIME_RESULTS_DIR}" \
+            --results-bucket waiting_room \
             --limit "${effective_limit}" \
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
             --request-delay "${JOB_SEARCH_REQUEST_DELAY}" \
@@ -175,11 +176,11 @@ jobs:
           echo "new_jobs=true" >> "$GITHUB_OUTPUT"
           echo "scrape_path=${scrape_path}" >> "$GITHUB_OUTPUT"
 
-      - name: Classify new jobs
-        if: steps.schedule_gate.outputs.run_job == 'true' && steps.scrape.outputs.new_jobs == 'true'
+      - name: Classify waiting-room jobs
+        if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
+        id: classify
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
-          SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}
           JOB_MATCHER_MODE: ${{ env.JOB_MATCHER_MODE }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -194,25 +195,37 @@ jobs:
             exit 1
           fi
 
+          set +e
           python3 match_jobs.py \
-            --input "$SCRAPE_PATH" \
+            --waiting-room \
             --output-root "$RUNTIME_RESULTS_DIR" \
             --matcher "$JOB_MATCHER_MODE" \
             --openai-model "$OPENAI_MODEL" \
-            --job-profile "$JOB_PROFILE_PATH"
+            --job-profile "$JOB_PROFILE_PATH" 2>&1 | tee classify.log
+          classify_status="${PIPESTATUS[0]}"
+          set -e
+
+          if [[ "$classify_status" -ne 0 ]]; then
+            exit "$classify_status"
+          fi
+
+          classified_input="$(grep -m1 '^Classified input ' classify.log | sed 's/^Classified input //')"
+          if [[ -n "$classified_input" ]]; then
+            echo "classified_input=${classified_input}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Send Telegram summary
         if: always() && steps.schedule_gate.outputs.report_job == 'true'
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
-          SCRAPE_PATH: ${{ steps.scrape.outputs.scrape_path }}
+          CLASSIFIED_INPUT: ${{ steps.classify.outputs.classified_input }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         shell: bash
         run: |
           args=(--results-root "$RUNTIME_RESULTS_DIR" --hours 12)
-          if [[ -n "$SCRAPE_PATH" ]]; then
-            args+=(--current-input "$SCRAPE_PATH")
+          if [[ -n "$CLASSIFIED_INPUT" ]]; then
+            args+=(--current-input "$CLASSIFIED_INPUT")
           fi
 
           python3 telegram_notify.py "${args[@]}"

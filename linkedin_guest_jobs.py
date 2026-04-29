@@ -26,6 +26,7 @@ GUEST_DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job
 DEFAULT_INPUT_PATH = Path("linkedin_search_input.json")
 DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
+WAITING_ROOM_BUCKET = "waiting_room"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
 DEFAULT_MAX_SEARCH_PAGES = 2
 DEFAULT_REQUEST_DELAY_SECONDS = 0.0
@@ -767,9 +768,13 @@ def fetch_job_details(
     return jobs
 
 
-def timestamped_output_path(output_name: str, results_root: Path = DEFAULT_RESULTS_ROOT) -> Path:
+def timestamped_output_path(
+    output_name: str,
+    results_root: Path = DEFAULT_RESULTS_ROOT,
+    results_bucket: str = DEFAULT_RESULTS_BUCKET,
+) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return results_root / DEFAULT_RESULTS_BUCKET / timestamp / Path(output_name).name
+    return results_root / results_bucket / timestamp / Path(output_name).name
 
 
 def main() -> int:
@@ -778,6 +783,12 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=2, help="Number of new jobs to fetch")
     parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
     parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT, help="Results memory root")
+    parser.add_argument(
+        "--results-bucket",
+        default=DEFAULT_RESULTS_BUCKET,
+        choices=(DEFAULT_RESULTS_BUCKET, WAITING_ROOM_BUCKET),
+        help="Results bucket to write scraped jobs into",
+    )
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_SEARCH_PAGES, help="Maximum search pages to scan")
     parser.add_argument(
         "--request-delay",
@@ -811,7 +822,7 @@ def main() -> int:
         return 1
 
     payload = [asdict(job) for job in jobs]
-    output_path = timestamped_output_path(args.output, results_root=args.results_root)
+    output_path = timestamped_output_path(args.output, results_root=args.results_root, results_bucket=args.results_bucket)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as output_file:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)

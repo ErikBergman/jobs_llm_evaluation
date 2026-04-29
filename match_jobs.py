@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from urllib.request import Request, urlopen
 ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
+WAITING_ROOM_BUCKET = "waiting_room"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
@@ -728,6 +730,10 @@ def timestamp_from_input(input_path: Path) -> str:
     raise ValueError("--timestamp is required unless --input is under <output-root>/discard/<timestamp>/")
 
 
+def current_timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
 def output_paths(input_path: Path, output_root: Path, timestamp: str) -> tuple[Path, Path, Path]:
     stem = input_path.stem
     return (
@@ -842,6 +848,52 @@ def is_unclassified_jobs_json(path: Path) -> bool:
     return path.suffix == ".json" and not path.name.endswith(("_hits.json", "_discard.json", "_match_metadata.json"))
 
 
+def waiting_room_root(output_root: Path) -> Path:
+    return output_root / WAITING_ROOM_BUCKET
+
+
+def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
+    root = waiting_room_root(output_root)
+    if not root.exists():
+        return []
+
+    jobs: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for path in sorted(root.rglob("*.json")):
+        if not is_unclassified_jobs_json(path):
+            continue
+        try:
+            payload = load_jobs(path)
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            print(f"Skipping unreadable waiting-room file {path}: {error}", file=sys.stderr)
+            continue
+        for job in payload:
+            job_id = job.get("job_id")
+            dedupe_key = str(job_id) if job_id not in (None, "") else json.dumps(job, sort_keys=True)
+            if dedupe_key in seen_ids:
+                continue
+            seen_ids.add(dedupe_key)
+            jobs.append(job)
+    return jobs
+
+
+def prepare_waiting_room_input(output_root: Path, timestamp: str, output_name: str = "waiting_room_jobs.json") -> Path | None:
+    jobs = load_waiting_room_jobs(output_root)
+    if not jobs:
+        return None
+
+    input_path = output_root / "discard" / timestamp / output_name
+    write_json(input_path, jobs)
+    return input_path
+
+
+def clear_waiting_room(output_root: Path) -> None:
+    root = waiting_room_root(output_root)
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True, exist_ok=True)
+
+
 def latest_discard_run(output_root: Path) -> Path:
     discard_root = output_root / "discard"
     if not discard_root.exists():
@@ -868,6 +920,7 @@ def main() -> int:
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--input", type=Path, help="Scraped jobs JSON file")
     input_group.add_argument("--latest", action="store_true", help="Use the newest results/discard/<timestamp>/ scrape")
+    input_group.add_argument("--waiting-room", action="store_true", help="Classify all jobs accumulated in results/waiting_room")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT, help="Results root directory")
     parser.add_argument("--timestamp", help="Result timestamp folder name")
     parser.add_argument("--matcher", choices=("mock", "openai"), default=DEFAULT_MATCHER, help="Matcher backend")
@@ -876,7 +929,15 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        input_path = input_from_latest(args.output_root) if args.latest else args.input
+        if args.waiting_room:
+            resolved_timestamp = args.timestamp or current_timestamp()
+            input_path = prepare_waiting_room_input(args.output_root, resolved_timestamp)
+            if input_path is None:
+                print(f"No waiting-room jobs found under {waiting_room_root(args.output_root)}.")
+                return 0
+        else:
+            resolved_timestamp = args.timestamp
+            input_path = input_from_latest(args.output_root) if args.latest else args.input
         decisioner = mock_match_decision
         decisions_provider = None
         if args.matcher == "openai":
@@ -886,12 +947,14 @@ def main() -> int:
         hits_path, discards_path, metadata_path, metadata = classify_file(
             input_path,
             args.output_root,
-            args.timestamp,
+            resolved_timestamp,
             decisioner=decisioner,
             decisions_provider=decisions_provider,
             matcher_name=args.matcher,
             model=args.openai_model if args.matcher == "openai" else None,
         )
+        if args.waiting_room:
+            clear_waiting_room(args.output_root)
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -909,6 +972,7 @@ def main() -> int:
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    print(f"Classified input {input_path}")
     print(f"Wrote {hits_path}")
     print(f"Wrote {discards_path}")
     print(f"Wrote {metadata_path}")

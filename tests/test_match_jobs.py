@@ -19,12 +19,14 @@ from match_jobs import (
     call_openai_unicorn_decision,
     call_openai_unicorn_triage,
     classify_file,
+    clear_waiting_room,
     env_flag_enabled,
     extract_response_text,
     input_from_latest,
     is_mock_hit,
     latest_discard_run,
     load_job_profile,
+    load_waiting_room_jobs,
     mock_match_decision,
     openai_two_stage_decisions,
     openai_title_vowel_prompt,
@@ -34,6 +36,7 @@ from match_jobs import (
     parse_hit_response,
     parse_triage_response,
     profile_cache_key,
+    prepare_waiting_room_input,
     rtf_to_text,
     response_usage,
     split_jobs,
@@ -42,6 +45,7 @@ from match_jobs import (
     summarize_response_shape,
     timestamp_from_input,
     triage_max_output_tokens,
+    waiting_room_root,
 )
 
 
@@ -525,6 +529,50 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(metadata["hits_count"], 1)
         self.assertEqual(metadata_json["discards_count"], 2)
         self.assertEqual([decision["job_id"] for decision in metadata_json["decisions"]], ["1", "2", "3"])
+
+    def test_waiting_room_jobs_are_deduped_and_prepared_for_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            older = root / "waiting_room" / "20260425_120000"
+            newer = root / "waiting_room" / "20260425_130000"
+            older.mkdir(parents=True)
+            newer.mkdir()
+            (older / "jobs.json").write_text(
+                json.dumps([
+                    {"job_id": "1", "description": "Engineer needed"},
+                    {"job_id": "2", "description": "Analyst"},
+                ]),
+                encoding="utf-8",
+            )
+            (newer / "jobs.json").write_text(
+                json.dumps([
+                    {"job_id": "2", "description": "Duplicate"},
+                    {"job_id": "3", "description": "Engineer needed"},
+                ]),
+                encoding="utf-8",
+            )
+
+            jobs = load_waiting_room_jobs(root)
+            input_path = prepare_waiting_room_input(root, "20260425_190000")
+
+            self.assertEqual([job["job_id"] for job in jobs], ["1", "2", "3"])
+            self.assertEqual(input_path, root / "discard" / "20260425_190000" / "waiting_room_jobs.json")
+            self.assertEqual(
+                [job["job_id"] for job in json.loads(input_path.read_text(encoding="utf-8"))],
+                ["1", "2", "3"],
+            )
+
+    def test_clear_waiting_room_wipes_bucket_but_leaves_empty_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            room = waiting_room_root(root)
+            (room / "20260425_120000").mkdir(parents=True)
+            (room / "20260425_120000" / "jobs.json").write_text("[]", encoding="utf-8")
+
+            clear_waiting_room(root)
+
+            self.assertTrue(room.exists())
+            self.assertEqual(list(room.iterdir()), [])
 
     def test_latest_discard_run_selects_newest_timestamp_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
