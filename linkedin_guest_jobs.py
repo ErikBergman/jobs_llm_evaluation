@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from html import unescape
 from html.parser import HTMLParser
@@ -74,6 +75,7 @@ class JobCard:
     posted: str = ""
     posted_date: str = ""
     url: str = ""
+    source_searches: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -661,7 +663,8 @@ def collect_unseen_cards_from_search_urls(
 
     cards_by_id: dict[str, JobCard] = {}
     for search_url in search_urls:
-        audit = SearchAudit(search=search_label(search_url))
+        label = search_label(search_url)
+        audit = SearchAudit(search=label)
         if audits is not None:
             audits.append(audit)
         for card in collect_cards(
@@ -671,7 +674,13 @@ def collect_unseen_cards_from_search_urls(
             fetch_html=fetch_html,
             audit=audit,
         ):
-            cards_by_id.setdefault(card.job_id, card)
+            if card.job_id in cards_by_id:
+                if label not in cards_by_id[card.job_id].source_searches:
+                    cards_by_id[card.job_id].source_searches.append(label)
+                continue
+            card_with_source = copy.copy(card)
+            card_with_source.source_searches = [label]
+            cards_by_id[card.job_id] = card_with_source
     return select_unseen_cards(sort_cards_by_latest_posted(cards_by_id.values()), seen_job_ids, limit)
 
 

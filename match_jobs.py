@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
 DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 WAITING_ROOM_BUCKET = "waiting_room"
+LLM_SEARCH_STATS_NAME = "llm_search_stats.csv"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
@@ -755,6 +757,93 @@ def write_object_json(path: Path, payload: dict[str, Any]) -> None:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
 
 
+def job_source_searches(job: dict[str, Any]) -> list[str]:
+    source_searches = job.get("source_searches")
+    if isinstance(source_searches, list):
+        cleaned = [str(source).strip() for source in source_searches if str(source).strip()]
+        return cleaned or ["unknown"]
+    if isinstance(source_searches, str) and source_searches.strip():
+        return [source_searches.strip()]
+    return ["unknown"]
+
+
+def append_llm_search_stats(
+    output_root: Path,
+    jobs: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    stats_name: str = LLM_SEARCH_STATS_NAME,
+) -> Path:
+    decisions = metadata.get("decisions")
+    if not isinstance(decisions, list):
+        raise ValueError("metadata decisions must be a list")
+    if len(jobs) != len(decisions):
+        raise ValueError("Decision count must match job count")
+
+    stats_by_search: dict[str, dict[str, int]] = {}
+    for job, decision in zip(jobs, decisions):
+        for search in job_source_searches(job):
+            row = stats_by_search.setdefault(
+                search,
+                {
+                    "new_ads": 0,
+                    "triaged_ads": 0,
+                    "confirmation_candidates": 0,
+                    "matches": 0,
+                    "rejected_by_triage": 0,
+                    "discarded_after_confirmation": 0,
+                },
+            )
+            row["new_ads"] += 1
+            row["triaged_ads"] += 1
+            if decision.get("stage") == "confirmation":
+                row["confirmation_candidates"] += 1
+                if decision.get("hit") is True:
+                    row["matches"] += 1
+                else:
+                    row["discarded_after_confirmation"] += 1
+            elif decision.get("stage") == "triage":
+                row["rejected_by_triage"] += 1
+            elif decision.get("hit") is True:
+                row["matches"] += 1
+
+    stats_path = output_root / stats_name
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "matched_at",
+        "timestamp",
+        "matcher",
+        "model",
+        "search_term",
+        "new_ads",
+        "triaged_ads",
+        "confirmation_candidates",
+        "matches",
+        "rejected_by_triage",
+        "discarded_after_confirmation",
+        "total_batch_ads",
+        "total_batch_matches",
+    ]
+    write_header = not stats_path.exists() or stats_path.stat().st_size == 0
+    with open(stats_path, "a", encoding="utf-8", newline="") as stats_file:
+        writer = csv.DictWriter(stats_file, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        for search, counts in sorted(stats_by_search.items()):
+            writer.writerow(
+                {
+                    "matched_at": metadata.get("matched_at", ""),
+                    "timestamp": metadata.get("timestamp", ""),
+                    "matcher": metadata.get("matcher", ""),
+                    "model": metadata.get("model", ""),
+                    "search_term": search,
+                    **counts,
+                    "total_batch_ads": metadata.get("job_count", 0),
+                    "total_batch_matches": metadata.get("hits_count", 0),
+                }
+            )
+    return stats_path
+
+
 def cheat_mode_decision(metadata: dict[str, Any]) -> dict[str, Any] | None:
     decisions = metadata.get("decisions")
     if not isinstance(decisions, list):
@@ -841,6 +930,8 @@ def classify_file(
     write_json(hits_path, hits)
     write_json(discards_path, discards)
     write_object_json(metadata_path, metadata)
+    if matcher_name == "openai":
+        append_llm_search_stats(output_root, jobs, metadata)
     return hits_path, discards_path, metadata_path, metadata
 
 
@@ -857,8 +948,7 @@ def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
     if not root.exists():
         return []
 
-    jobs: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
+    jobs_by_id: dict[str, dict[str, Any]] = {}
     for path in sorted(root.rglob("*.json")):
         if not is_unclassified_jobs_json(path):
             continue
@@ -870,11 +960,15 @@ def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
         for job in payload:
             job_id = job.get("job_id")
             dedupe_key = str(job_id) if job_id not in (None, "") else json.dumps(job, sort_keys=True)
-            if dedupe_key in seen_ids:
+            if dedupe_key in jobs_by_id:
+                merged_sources = job_source_searches(jobs_by_id[dedupe_key])
+                for source in job_source_searches(job):
+                    if source not in merged_sources:
+                        merged_sources.append(source)
+                jobs_by_id[dedupe_key]["source_searches"] = merged_sources
                 continue
-            seen_ids.add(dedupe_key)
-            jobs.append(job)
-    return jobs
+            jobs_by_id[dedupe_key] = dict(job)
+    return list(jobs_by_id.values())
 
 
 def prepare_waiting_room_input(output_root: Path, timestamp: str, output_name: str = "waiting_room_jobs.json") -> Path | None:

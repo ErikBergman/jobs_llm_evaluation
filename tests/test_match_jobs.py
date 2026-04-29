@@ -1,4 +1,5 @@
 import io
+import csv
 import json
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ from match_jobs import (
     call_openai_unicorn_triage,
     classify_file,
     clear_waiting_room,
+    append_llm_search_stats,
     env_flag_enabled,
     extract_response_text,
     input_from_latest,
@@ -530,6 +532,72 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(metadata_json["discards_count"], 2)
         self.assertEqual([decision["job_id"] for decision in metadata_json["decisions"]], ["1", "2", "3"])
 
+    def test_openai_classification_appends_base_level_search_stats(self) -> None:
+        jobs = [
+            {"job_id": "1", "description": "One", "source_searches": ["developer", "python"]},
+            {"job_id": "2", "description": "Two", "source_searches": ["developer"]},
+            {"job_id": "3", "description": "Three", "source_searches": ["life science"]},
+        ]
+
+        def decisions_provider(_jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+            return [
+                {"job_id": "1", "title": "One", "hit": True, "stage": "confirmation"},
+                {"job_id": "2", "title": "Two", "hit": False, "stage": "confirmation"},
+                {"job_id": "3", "title": "Three", "hit": False, "stage": "triage"},
+            ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime_results"
+            input_path = root / "discard" / "20260425_190000" / "waiting_room_jobs.json"
+            input_path.parent.mkdir(parents=True)
+            input_path.write_text(json.dumps(jobs), encoding="utf-8")
+
+            classify_file(
+                input_path,
+                root,
+                decisions_provider=decisions_provider,
+                matcher_name="openai",
+                model="gpt-5.4-mini",
+            )
+
+            stats_path = root / "llm_search_stats.csv"
+            with open(stats_path, encoding="utf-8", newline="") as stats_file:
+                rows = list(csv.DictReader(stats_file))
+
+        self.assertEqual(stats_path.parent, root)
+        self.assertEqual([row["search_term"] for row in rows], ["developer", "life science", "python"])
+        self.assertEqual(rows[0]["new_ads"], "2")
+        self.assertEqual(rows[0]["triaged_ads"], "2")
+        self.assertEqual(rows[0]["confirmation_candidates"], "2")
+        self.assertEqual(rows[0]["matches"], "1")
+        self.assertEqual(rows[0]["discarded_after_confirmation"], "1")
+        self.assertEqual(rows[1]["rejected_by_triage"], "1")
+        self.assertEqual(rows[2]["matches"], "1")
+        self.assertEqual(rows[0]["total_batch_ads"], "3")
+        self.assertEqual(rows[0]["total_batch_matches"], "1")
+
+    def test_llm_search_stats_file_is_append_only(self) -> None:
+        jobs = [{"job_id": "1", "source_searches": ["developer"]}]
+        metadata = {
+            "matched_at": "2026-04-25T17:00:00Z",
+            "timestamp": "20260425_190000",
+            "matcher": "openai",
+            "model": "gpt-5.4-mini",
+            "job_count": 1,
+            "hits_count": 0,
+            "decisions": [{"job_id": "1", "hit": False, "stage": "triage"}],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "runtime_results"
+            append_llm_search_stats(root, jobs, metadata)
+            metadata["timestamp"] = "20260426_070000"
+            append_llm_search_stats(root, jobs, metadata)
+
+            with open(root / "llm_search_stats.csv", encoding="utf-8", newline="") as stats_file:
+                rows = list(csv.DictReader(stats_file))
+
+        self.assertEqual([row["timestamp"] for row in rows], ["20260425_190000", "20260426_070000"])
+
     def test_waiting_room_jobs_are_deduped_and_prepared_for_classification(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "results"
@@ -539,15 +607,15 @@ class MockMatcherTests(unittest.TestCase):
             newer.mkdir()
             (older / "jobs.json").write_text(
                 json.dumps([
-                    {"job_id": "1", "description": "Engineer needed"},
-                    {"job_id": "2", "description": "Analyst"},
+                    {"job_id": "1", "description": "Engineer needed", "source_searches": ["developer"]},
+                    {"job_id": "2", "description": "Analyst", "source_searches": ["python"]},
                 ]),
                 encoding="utf-8",
             )
             (newer / "jobs.json").write_text(
                 json.dumps([
-                    {"job_id": "2", "description": "Duplicate"},
-                    {"job_id": "3", "description": "Engineer needed"},
+                    {"job_id": "2", "description": "Duplicate", "source_searches": ["integration"]},
+                    {"job_id": "3", "description": "Engineer needed", "source_searches": ["systems"]},
                 ]),
                 encoding="utf-8",
             )
@@ -556,6 +624,7 @@ class MockMatcherTests(unittest.TestCase):
             input_path = prepare_waiting_room_input(root, "20260425_190000")
 
             self.assertEqual([job["job_id"] for job in jobs], ["1", "2", "3"])
+            self.assertEqual(jobs[1]["source_searches"], ["python", "integration"])
             self.assertEqual(input_path, root / "discard" / "20260425_190000" / "waiting_room_jobs.json")
             self.assertEqual(
                 [job["job_id"] for job in json.loads(input_path.read_text(encoding="utf-8"))],

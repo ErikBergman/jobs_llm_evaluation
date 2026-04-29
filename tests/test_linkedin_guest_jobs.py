@@ -344,6 +344,7 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertEqual([card.job_id for card in cards], ["newer", "older"])
+        self.assertEqual(cards[0].source_searches, ["life science"])
         self.assertEqual(
             audits,
             [
@@ -367,6 +368,28 @@ class SearchUrlTests(unittest.TestCase):
     def test_search_label_uses_keywords_or_geo_id(self) -> None:
         self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?keywords=life+science"), "life science")
         self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?geoId=105734258"), "geoId=105734258")
+
+    def test_duplicate_cards_remember_all_source_searches(self) -> None:
+        def fake_fetch(url: str) -> str:
+            return """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:duplicate">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """
+
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?keywords=developer",
+                "https://www.linkedin.com/jobs/search-results/?keywords=python",
+            ],
+            limit=2,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0].source_searches, ["developer", "python"])
 
     def test_collect_unseen_cards_paginates_until_limit_of_new_jobs(self) -> None:
         pages = {
