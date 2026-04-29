@@ -42,6 +42,9 @@ jobs:
 
           cron_minute="$(awk '{print $1}' <<< "$event_schedule")"
           cron_hour="$(awk '{print $2}' <<< "$event_schedule")"
+          if [[ "$cron_hour" == "*" ]]; then
+            cron_hour="$(date -u +%H)"
+          fi
           utc_date="$(date -u +%Y-%m-%d)"
           scheduled_utc_time="${utc_date} ${cron_hour}:${cron_minute} UTC"
           scheduled_local_hour="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" +%H)"
