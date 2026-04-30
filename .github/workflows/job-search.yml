@@ -248,3 +248,4 @@ jobs:
           fi
 
           rclone copy "$RUNTIME_RESULTS_DIR" "koofr:${KOOFR_PATH}" --create-empty-src-dirs
+          rclone sync "$RUNTIME_RESULTS_DIR/waiting_room" "koofr:${KOOFR_PATH}/waiting_room" --create-empty-src-dirs
