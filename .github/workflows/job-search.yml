@@ -1,12 +1,16 @@
 name: Job Search
+run-name: ${{ ((github.event_name == 'workflow_dispatch' && inputs.report_job) || github.event.client_payload.report_job == 'true') && 'Job Search with evaluation' || 'Job Search' }}
 
 on:
   workflow_dispatch:
-  schedule:
-    # GitHub schedules are UTC. Run hourly at :17 to avoid the busiest
-    # top-of-hour scheduler window; the report gate below uses the intended
-    # schedule time, not the delayed runner start time.
-    - cron: "17 * * * *"
+    inputs:
+      report_job:
+        description: Run evaluation and send the Telegram summary
+        type: boolean
+        required: false
+        default: true
+  repository_dispatch:
+    types: [job-search]
 
 concurrency:
   group: job-search
@@ -30,36 +34,37 @@ jobs:
         shell: bash
         run: |
           event_name="${{ github.event_name }}"
-          event_schedule="${{ github.event.schedule }}"
           local_time="$(TZ=Europe/Stockholm date '+%Y-%m-%d %H:%M:%S %Z')"
 
           if [[ "$event_name" == "workflow_dispatch" ]]; then
+            report_job="${{ inputs.report_job }}"
+            if [[ -z "$report_job" ]]; then
+              report_job=true
+            fi
             echo "run_job=true" >> "$GITHUB_OUTPUT"
-            echo "report_job=true" >> "$GITHUB_OUTPUT"
-            echo "Running manually triggered job-search workflow with reporting at ${local_time}."
+            echo "report_job=${report_job}" >> "$GITHUB_OUTPUT"
+            echo "Running manually triggered job-search workflow at ${local_time}; report_job=${report_job}."
             exit 0
           fi
 
-          cron_minute="$(awk '{print $1}' <<< "$event_schedule")"
-          cron_hour="$(awk '{print $2}' <<< "$event_schedule")"
-          if [[ "$cron_hour" == "*" ]]; then
-            cron_hour="$(date -u +%H)"
-          fi
-          utc_date="$(date -u +%Y-%m-%d)"
-          scheduled_utc_time="${utc_date} ${cron_hour}:${cron_minute} UTC"
-          scheduled_local_hour="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" +%H)"
-          scheduled_local_time="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" '+%Y-%m-%d %H:%M %Z')"
+          if [[ "$event_name" == "repository_dispatch" ]]; then
+            report_job="${{ github.event.client_payload.report_job }}"
+            scheduled_local_time="${{ github.event.client_payload.scheduled_local_time }}"
+            scheduled_utc_time="${{ github.event.client_payload.scheduled_utc_time }}"
 
-          echo "run_job=true" >> "$GITHUB_OUTPUT"
-          echo "Running hourly job-search workflow for scheduled local time ${scheduled_local_time}; runner started at ${local_time}."
+            if [[ "$report_job" != "true" && "$report_job" != "false" ]]; then
+              echo "Invalid repository_dispatch report_job payload: ${report_job}"
+              exit 1
+            fi
 
-          if [[ "$scheduled_local_hour" == "07" || "$scheduled_local_hour" == "19" ]]; then
-            echo "report_job=true" >> "$GITHUB_OUTPUT"
-            echo "Telegram reporting is enabled for this scheduled local hour."
-          else
-            echo "report_job=false" >> "$GITHUB_OUTPUT"
-            echo "Telegram reporting is skipped; scheduled local time ${scheduled_local_time} is not in the 07 or 19 Europe/Stockholm hour."
+            echo "run_job=true" >> "$GITHUB_OUTPUT"
+            echo "report_job=${report_job}" >> "$GITHUB_OUTPUT"
+            echo "Running dispatched job-search workflow for scheduled local time ${scheduled_local_time:-unknown}; scheduled UTC time ${scheduled_utc_time:-unknown}; runner started at ${local_time}; report_job=${report_job}."
+            exit 0
           fi
+
+          echo "Unsupported event: ${event_name}"
+          exit 1
 
       - name: Checkout
         if: steps.schedule_gate.outputs.run_job == 'true'

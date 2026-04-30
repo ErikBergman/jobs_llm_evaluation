@@ -1,0 +1,87 @@
+name: Job Search Scheduler
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules are UTC. Use exact hourly cron entries so the intended
+    # UTC hour is available even if GitHub starts the run late.
+    - cron: "17 0 * * *"
+    - cron: "17 1 * * *"
+    - cron: "17 2 * * *"
+    - cron: "17 3 * * *"
+    - cron: "17 4 * * *"
+    - cron: "17 5 * * *"
+    - cron: "17 6 * * *"
+    - cron: "17 7 * * *"
+    - cron: "17 8 * * *"
+    - cron: "17 9 * * *"
+    - cron: "17 10 * * *"
+    - cron: "17 11 * * *"
+    - cron: "17 12 * * *"
+    - cron: "17 13 * * *"
+    - cron: "17 14 * * *"
+    - cron: "17 15 * * *"
+    - cron: "17 16 * * *"
+    - cron: "17 17 * * *"
+    - cron: "17 18 * * *"
+    - cron: "17 19 * * *"
+    - cron: "17 20 * * *"
+    - cron: "17 21 * * *"
+    - cron: "17 22 * * *"
+    - cron: "17 23 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-search-scheduler
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch job-search workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            cron_minute="$(awk '{print $1}' <<< "$EVENT_SCHEDULE")"
+            cron_hour="$(awk '{print $2}' <<< "$EVENT_SCHEDULE")"
+            utc_date="$(date -u +%Y-%m-%d)"
+            scheduled_utc_time="${utc_date} ${cron_hour}:${cron_minute} UTC"
+          else
+            scheduled_utc_time="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          fi
+
+          scheduled_local_hour="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" +%H)"
+          scheduled_local_time="$(TZ=Europe/Stockholm date -d "$scheduled_utc_time" '+%Y-%m-%d %H:%M %Z')"
+          report_job=false
+
+          if [[ "$scheduled_local_hour" == "07" || "$scheduled_local_hour" == "19" ]]; then
+            report_job=true
+          fi
+
+          echo "Dispatching job-search workflow for scheduled local time ${scheduled_local_time}; report_job=${report_job}."
+
+          payload="$(
+            jq -nc \
+              --arg event_type "job-search" \
+              --arg report_job "$report_job" \
+              --arg scheduled_local_time "$scheduled_local_time" \
+              --arg scheduled_utc_time "$scheduled_utc_time" \
+              --arg event_schedule "$EVENT_SCHEDULE" \
+              '{event_type: $event_type, client_payload: {report_job: $report_job, scheduled_local_time: $scheduled_local_time, scheduled_utc_time: $scheduled_utc_time, event_schedule: $event_schedule}}'
+          )"
+
+          curl -fsS \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPOSITORY}/dispatches" \
+            -d "$payload"
