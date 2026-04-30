@@ -23,6 +23,7 @@ DEFAULT_OUTPUT_ROOT = Path("results")
 DEFAULT_MATCHER = "mock"
 WAITING_ROOM_BUCKET = "waiting_room"
 LLM_SEARCH_STATS_NAME = "llm_search_stats.csv"
+SEARCH_AUDIT_SUFFIX = "_search_audit.json"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
@@ -844,6 +845,119 @@ def append_llm_search_stats(
     return stats_path
 
 
+def search_audit_path(input_path: Path) -> Path:
+    return input_path.with_name(f"{input_path.stem}{SEARCH_AUDIT_SUFFIX}")
+
+
+def load_search_audit(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    with open(path, encoding="utf-8") as audit_file:
+        payload = json.load(audit_file)
+    if not isinstance(payload, list):
+        raise ValueError(f"{path} must contain a JSON array of search audit rows")
+    rows: list[dict[str, Any]] = []
+    for row in payload:
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def merge_search_audits(audits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for audit in audits:
+        search = str(audit.get("search") or "unknown")
+        row = merged.setdefault(
+            search,
+            {
+                "search": search,
+                "pages_requested": 0,
+                "results_seen": 0,
+                "already_in_memory": 0,
+                "throttled": False,
+            },
+        )
+        row["pages_requested"] += int(audit.get("pages_requested") or 0)
+        row["results_seen"] += int(audit.get("results_seen") or 0)
+        row["already_in_memory"] += int(audit.get("already_in_memory") or 0)
+        row["throttled"] = bool(row["throttled"] or audit.get("throttled"))
+    return [merged[search] for search in sorted(merged)]
+
+
+def write_search_audit(path: Path, audits: list[dict[str, Any]]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as audit_file:
+        json.dump(audits, audit_file, ensure_ascii=False, indent=2)
+    return path
+
+
+def llm_counts_by_search(jobs: list[dict[str, Any]], decisions: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    if len(jobs) != len(decisions):
+        raise ValueError("Decision count must match job count")
+
+    counts: dict[str, dict[str, int]] = {}
+    for job, decision in zip(jobs, decisions):
+        for search in job_source_searches(job):
+            row = counts.setdefault(search, {"passed_first_layer": 0, "hits": 0})
+            if decision.get("stage") == "confirmation":
+                row["passed_first_layer"] += 1
+            if decision.get("hit") is True:
+                row["hits"] += 1
+    return counts
+
+
+def format_search_evaluation_audit_table(
+    audits: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+) -> str:
+    llm_counts = llm_counts_by_search(jobs, decisions)
+    rows_by_search: dict[str, dict[str, Any]] = {str(audit.get("search") or "unknown"): dict(audit) for audit in audits}
+    for search in llm_counts:
+        rows_by_search.setdefault(
+            search,
+            {
+                "search": search,
+                "pages_requested": 0,
+                "results_seen": 0,
+                "already_in_memory": 0,
+                "throttled": False,
+            },
+        )
+
+    rows = []
+    for search, audit in sorted(rows_by_search.items()):
+        counts = llm_counts.get(search, {})
+        rows.append(
+            (
+                search,
+                str(audit.get("pages_requested") or 0),
+                str(audit.get("results_seen") or 0),
+                str(audit.get("already_in_memory") or 0),
+                str(counts.get("passed_first_layer", 0)),
+                str(counts.get("hits", 0)),
+                "yes" if audit.get("throttled") else "no",
+            )
+        )
+
+    headers = ("Search", "Pages", "Looked at", "Already in memory", "Passed 1st layer LLM", "Hits", "Throttled")
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows)) if rows else len(headers[index])
+        for index in range(len(headers))
+    ]
+
+    def border() -> str:
+        return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+    def render_row(values: tuple[str, str, str, str, str, str, str]) -> str:
+        return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(values)) + " |"
+
+    lines = ["Search evaluation audit", border(), render_row(headers), border()]
+    lines.extend(render_row(row) for row in rows)
+    lines.append(border())
+    return "\n".join(lines)
+
+
 def cheat_mode_decision(metadata: dict[str, Any]) -> dict[str, Any] | None:
     decisions = metadata.get("decisions")
     if not isinstance(decisions, list):
@@ -936,7 +1050,9 @@ def classify_file(
 
 
 def is_unclassified_jobs_json(path: Path) -> bool:
-    return path.suffix == ".json" and not path.name.endswith(("_hits.json", "_discard.json", "_match_metadata.json"))
+    return path.suffix == ".json" and not path.name.endswith(
+        ("_hits.json", "_discard.json", "_match_metadata.json", SEARCH_AUDIT_SUFFIX)
+    )
 
 
 def waiting_room_root(output_root: Path) -> Path:
@@ -978,6 +1094,10 @@ def prepare_waiting_room_input(output_root: Path, timestamp: str, output_name: s
 
     input_path = output_root / "discard" / timestamp / output_name
     write_json(input_path, jobs)
+    audits: list[dict[str, Any]] = []
+    for audit_path in sorted(waiting_room_root(output_root).rglob(f"*{SEARCH_AUDIT_SUFFIX}")):
+        audits.extend(load_search_audit(audit_path))
+    write_search_audit(search_audit_path(input_path), merge_search_audits(audits))
     return input_path
 
 
@@ -1047,6 +1167,10 @@ def main() -> int:
             matcher_name=args.matcher,
             model=args.openai_model if args.matcher == "openai" else None,
         )
+        if args.matcher == "openai":
+            jobs = load_jobs(input_path)
+            audits = load_search_audit(search_audit_path(input_path))
+            print(format_search_evaluation_audit_table(audits, jobs, metadata["decisions"]))
         if args.waiting_room:
             clear_waiting_room(args.output_root)
     except ValueError as error:

@@ -24,6 +24,7 @@ from match_jobs import (
     append_llm_search_stats,
     env_flag_enabled,
     extract_response_text,
+    format_search_evaluation_audit_table,
     input_from_latest,
     is_mock_hit,
     latest_discard_run,
@@ -41,6 +42,7 @@ from match_jobs import (
     prepare_waiting_room_input,
     rtf_to_text,
     response_usage,
+    search_audit_path,
     split_jobs,
     split_jobs_from_decisions,
     split_jobs_with_decisions,
@@ -576,6 +578,38 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(rows[0]["total_batch_ads"], "3")
         self.assertEqual(rows[0]["total_batch_matches"], "1")
 
+    def test_search_evaluation_audit_combines_scrape_and_llm_counts(self) -> None:
+        table = format_search_evaluation_audit_table(
+            [
+                {
+                    "search": "developer",
+                    "pages_requested": 2,
+                    "results_seen": 10,
+                    "already_in_memory": 7,
+                    "throttled": False,
+                },
+                {
+                    "search": "life science",
+                    "pages_requested": 1,
+                    "results_seen": 3,
+                    "already_in_memory": 1,
+                    "throttled": True,
+                },
+            ],
+            [
+                {"job_id": "1", "source_searches": ["developer", "life science"]},
+                {"job_id": "2", "source_searches": ["developer"]},
+            ],
+            [
+                {"job_id": "1", "hit": True, "stage": "confirmation"},
+                {"job_id": "2", "hit": False, "stage": "triage"},
+            ],
+        )
+
+        self.assertIn("Search evaluation audit", table)
+        self.assertIn("| developer    | 2     | 10        | 7                 | 1                    | 1    | no        |", table)
+        self.assertIn("| life science | 1     | 3         | 1                 | 1                    | 1    | yes       |", table)
+
     def test_llm_search_stats_file_is_append_only(self) -> None:
         jobs = [{"job_id": "1", "source_searches": ["developer"]}]
         metadata = {
@@ -619,17 +653,52 @@ class MockMatcherTests(unittest.TestCase):
                 ]),
                 encoding="utf-8",
             )
+            (older / "jobs_search_audit.json").write_text(
+                json.dumps([
+                    {
+                        "search": "developer",
+                        "pages_requested": 1,
+                        "results_seen": 5,
+                        "already_in_memory": 3,
+                        "throttled": False,
+                    }
+                ]),
+                encoding="utf-8",
+            )
+            (newer / "jobs_search_audit.json").write_text(
+                json.dumps([
+                    {
+                        "search": "developer",
+                        "pages_requested": 1,
+                        "results_seen": 4,
+                        "already_in_memory": 2,
+                        "throttled": True,
+                    }
+                ]),
+                encoding="utf-8",
+            )
 
             jobs = load_waiting_room_jobs(root)
             input_path = prepare_waiting_room_input(root, "20260425_190000")
+            written_jobs = json.loads(input_path.read_text(encoding="utf-8"))
+            written_audit = json.loads(search_audit_path(input_path).read_text(encoding="utf-8"))
 
-            self.assertEqual([job["job_id"] for job in jobs], ["1", "2", "3"])
-            self.assertEqual(jobs[1]["source_searches"], ["python", "integration"])
-            self.assertEqual(input_path, root / "discard" / "20260425_190000" / "waiting_room_jobs.json")
-            self.assertEqual(
-                [job["job_id"] for job in json.loads(input_path.read_text(encoding="utf-8"))],
-                ["1", "2", "3"],
-            )
+        self.assertEqual([job["job_id"] for job in jobs], ["1", "2", "3"])
+        self.assertEqual(jobs[1]["source_searches"], ["python", "integration"])
+        self.assertEqual(input_path, root / "discard" / "20260425_190000" / "waiting_room_jobs.json")
+        self.assertEqual([job["job_id"] for job in written_jobs], ["1", "2", "3"])
+        self.assertEqual(
+            written_audit,
+            [
+                {
+                    "search": "developer",
+                    "pages_requested": 2,
+                    "results_seen": 9,
+                    "already_in_memory": 5,
+                    "throttled": True,
+                }
+            ],
+        )
 
     def test_clear_waiting_room_wipes_bucket_but_leaves_empty_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

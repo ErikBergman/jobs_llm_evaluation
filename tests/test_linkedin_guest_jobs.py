@@ -362,8 +362,29 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertIn("Search audit", table)
-        self.assertIn("| developer    | 2     | 10                | no        |", table)
-        self.assertIn("| life science | 1     | 0                 | yes       |", table)
+        self.assertIn("| developer    | 2     | 10        | 0                 |                      |      | no        |", table)
+        self.assertIn("| life science | 1     | 0         | 0                 |                      |      | yes       |", table)
+
+    def test_search_audit_counts_results_already_in_memory(self) -> None:
+        def fake_fetch(_url: str) -> str:
+            return """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:seen"></div>
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:new"></div>
+            """
+
+        audits: list[SearchAudit] = []
+        cards = collect_unseen_cards_from_search_urls(
+            ["https://www.linkedin.com/jobs/search-results/?keywords=developer"],
+            limit=2,
+            seen_job_ids={"seen"},
+            max_pages=1,
+            fetch_html=fake_fetch,
+            audits=audits,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["new"])
+        self.assertEqual(audits[0].results_seen, 2)
+        self.assertEqual(audits[0].already_in_memory, 1)
 
     def test_search_label_uses_keywords_or_geo_id(self) -> None:
         self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?keywords=life+science"), "life science")

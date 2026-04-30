@@ -88,6 +88,7 @@ class SearchAudit:
     search: str
     pages_requested: int = 0
     results_seen: int = 0
+    already_in_memory: int = 0
     throttled: bool = False
 
 
@@ -674,6 +675,8 @@ def collect_unseen_cards_from_search_urls(
             fetch_html=fetch_html,
             audit=audit,
         ):
+            if card.job_id in seen_job_ids:
+                audit.already_in_memory += 1
             if card.job_id in cards_by_id:
                 if label not in cards_by_id[card.job_id].source_searches:
                     cards_by_id[card.job_id].source_searches.append(label)
@@ -686,10 +689,18 @@ def collect_unseen_cards_from_search_urls(
 
 def format_search_audit_table(audits: Iterable[SearchAudit]) -> str:
     rows = [
-        (audit.search, str(audit.pages_requested), str(audit.results_seen), "yes" if audit.throttled else "no")
+        (
+            audit.search,
+            str(audit.pages_requested),
+            str(audit.results_seen),
+            str(audit.already_in_memory),
+            "",
+            "",
+            "yes" if audit.throttled else "no",
+        )
         for audit in audits
     ]
-    headers = ("Search", "Pages", "Results looked at", "Throttled")
+    headers = ("Search", "Pages", "Looked at", "Already in memory", "Passed 1st layer LLM", "Hits", "Throttled")
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows)) if rows else len(headers[index])
         for index in range(len(headers))
@@ -705,6 +716,17 @@ def format_search_audit_table(audits: Iterable[SearchAudit]) -> str:
     lines.extend(render_row(row) for row in rows)
     lines.append(border())
     return "\n".join(lines)
+
+
+def search_audit_output_path(output_path: Path) -> Path:
+    return output_path.with_name(f"{output_path.stem}_search_audit.json")
+
+
+def write_search_audit(output_path: Path, audits: Iterable[SearchAudit]) -> Path:
+    audit_path = search_audit_output_path(output_path)
+    with open(audit_path, "w", encoding="utf-8") as audit_file:
+        json.dump([asdict(audit) for audit in audits], audit_file, ensure_ascii=False, indent=2)
+    return audit_path
 
 
 def extract_description(html: str) -> str:
@@ -890,6 +912,7 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as output_file:
         json.dump(payload, output_file, ensure_ascii=False, indent=2)
+    write_search_audit(output_path, search_audits)
 
     print(f"Wrote {output_path}")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
