@@ -22,6 +22,7 @@ from match_jobs import (
     classify_file,
     clear_waiting_room,
     append_llm_search_stats,
+    apply_prefilter_to_decisions,
     env_flag_enabled,
     extract_response_text,
     format_search_evaluation_audit_table,
@@ -32,6 +33,7 @@ from match_jobs import (
     load_waiting_room_jobs,
     mock_match_decision,
     openai_two_stage_decisions,
+    openai_prefiltered_two_stage_decisions,
     openai_title_vowel_prompt,
     openai_unicorn_triage_prompt,
     openai_unicorn_prompt,
@@ -40,16 +42,20 @@ from match_jobs import (
     parse_triage_response,
     profile_cache_key,
     prepare_waiting_room_input,
+    prefilter_rejection_decision,
+    requeue_waiting_room_jobs,
     rtf_to_text,
     response_usage,
     search_audit_path,
     split_jobs,
     split_jobs_from_decisions,
     split_jobs_with_decisions,
+    split_waiting_room_jobs_for_llm_limit,
     summarize_response_shape,
     timestamp_from_input,
     triage_max_output_tokens,
     waiting_room_root,
+    write_waiting_room_input,
 )
 
 
@@ -374,6 +380,67 @@ class MockMatcherTests(unittest.TestCase):
         self.assertIsNone(decisions[1]["usage"])
         self.assertEqual(decisions[1]["triage_usage"], {"input_tokens": 500, "output_tokens": 50})
 
+    def test_prefilter_rejection_decision_uses_stored_reason(self) -> None:
+        decision = prefilter_rejection_decision(
+            {
+                "job_id": "1",
+                "title": "Sjuksköterska",
+                "prefilter_reason": "Rejected obvious healthcare role: sjuksköterska",
+                "prefilter_negative_matches": ["sjuksköterska"],
+            }
+        )
+
+        self.assertEqual(decision["job_id"], "1")
+        self.assertFalse(decision["hit"])
+        self.assertEqual(decision["matcher"], "prefilter")
+        self.assertEqual(decision["stage"], "prefilter")
+        self.assertEqual(decision["prefilter_negative_matches"], ["sjuksköterska"])
+
+    def test_apply_prefilter_to_decisions_only_sends_passing_jobs_to_provider(self) -> None:
+        provider_inputs = []
+
+        def fake_provider(jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+            provider_inputs.append(jobs)
+            return [{"job_id": job["job_id"], "title": job.get("title"), "hit": True, "stage": "confirmation"} for job in jobs]
+
+        decisions = apply_prefilter_to_decisions(
+            [
+                {"job_id": "1", "title": "Backend Developer", "prefilter_pass": True},
+                {
+                    "job_id": "2",
+                    "title": "Sjuksköterska",
+                    "prefilter_pass": False,
+                    "prefilter_reason": "Rejected obvious healthcare role: sjuksköterska",
+                },
+            ],
+            fake_provider,
+        )
+
+        self.assertEqual([[job["job_id"] for job in jobs] for jobs in provider_inputs], [["1"]])
+        self.assertEqual([decision["stage"] for decision in decisions], ["confirmation", "prefilter"])
+
+    def test_openai_prefiltered_two_stage_decisions_skips_openai_when_all_jobs_fail_prefilter(self) -> None:
+        def fake_post(url, payload, headers):
+            raise AssertionError("OpenAI should not be called for prefilter-rejected jobs")
+
+        decisions = openai_prefiltered_two_stage_decisions(
+            [
+                {
+                    "job_id": "1",
+                    "title": "Farmaceut",
+                    "prefilter_pass": False,
+                    "prefilter_reason": "Rejected obvious pharmacy role: farmaceut",
+                }
+            ],
+            "test-key",
+            "Candidate profile",
+            post_json=fake_post,
+        )
+
+        self.assertEqual(len(decisions), 1)
+        self.assertEqual(decisions[0]["stage"], "prefilter")
+        self.assertEqual(decisions[0]["reason"], "Rejected obvious pharmacy role: farmaceut")
+
     def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
         def fake_post(url, payload, headers):
             return {
@@ -607,8 +674,8 @@ class MockMatcherTests(unittest.TestCase):
         )
 
         self.assertIn("Search evaluation audit", table)
-        self.assertIn("| developer    | 2     | 10        | 7                 | 1                    | 1    | no        |", table)
-        self.assertIn("| life science | 1     | 3         | 1                 | 1                    | 1    | yes       |", table)
+        self.assertIn("| developer    | 2     | 10        | 7                 | 2                | 1                    | 1    | no        |", table)
+        self.assertIn("| life science | 1     | 3         | 1                 | 1                | 1                    | 1    | yes       |", table)
 
     def test_llm_search_stats_file_is_append_only(self) -> None:
         jobs = [{"job_id": "1", "source_searches": ["developer"]}]
@@ -677,6 +744,14 @@ class MockMatcherTests(unittest.TestCase):
                 ]),
                 encoding="utf-8",
             )
+            (newer / "jobs_metadata.json").write_text(
+                json.dumps({"job_id": "metadata-should-be-ignored"}),
+                encoding="utf-8",
+            )
+            (newer / "metadata.json").write_text(
+                json.dumps({"job_id": "also-metadata"}),
+                encoding="utf-8",
+            )
 
             jobs = load_waiting_room_jobs(root)
             input_path = prepare_waiting_room_input(root, "20260425_190000")
@@ -695,10 +770,34 @@ class MockMatcherTests(unittest.TestCase):
                     "pages_requested": 2,
                     "results_seen": 9,
                     "already_in_memory": 5,
+                    "passed_prefilter": 0,
                     "throttled": True,
                 }
             ],
         )
+
+    def test_waiting_room_llm_limit_defers_only_prefilter_passing_overflow(self) -> None:
+        jobs = [
+            {"job_id": "1", "prefilter_pass": True},
+            {"job_id": "2", "prefilter_pass": False},
+            {"job_id": "3", "prefilter_pass": True},
+            {"job_id": "4", "prefilter_pass": True},
+        ]
+
+        selected, deferred = split_waiting_room_jobs_for_llm_limit(jobs, llm_limit=2)
+
+        self.assertEqual([job["job_id"] for job in selected], ["1", "2", "3"])
+        self.assertEqual([job["job_id"] for job in deferred], ["4"])
+
+    def test_requeued_deferred_waiting_room_jobs_are_loadable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "results"
+            path = requeue_waiting_room_jobs(root, "20260425_190000", [{"job_id": "deferred", "prefilter_pass": True}])
+
+            jobs = load_waiting_room_jobs(root)
+
+        self.assertEqual(path, root / "waiting_room" / "20260425_190000" / "deferred_jobs.json")
+        self.assertEqual([job["job_id"] for job in jobs], ["deferred"])
 
     def test_clear_waiting_room_wipes_bucket_but_leaves_empty_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

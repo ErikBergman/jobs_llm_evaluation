@@ -4,13 +4,13 @@ Scrape public LinkedIn job ads, store each scrape under `results/discard/<timest
 
 ## Scrape jobs
 
-Configure the LinkedIn search in `linkedin_search_input.json`, or copy from `linkedin_search_input.template.jsonc` for documented filter syntax.
+Configure the LinkedIn search in `linkedin_search_input.json`, or copy from `linkedin_search_input.template.jsonc` for documented filter syntax. The production config starts with a geo-only Lund search and keeps keyword searches as source labels; broad discovery should come from LinkedIn geography and recency, not LinkedIn keyword filtering.
 
 ```bash
-python3 linkedin_guest_jobs.py --limit 2
+python3 linkedin_guest_jobs.py --card-limit 100 --detail-limit 100 --max-pages 10
 ```
 
-The scraper writes a timestamped JSON file under `results/discard/`.
+The scraper writes a timestamped JSON file under `results/discard/` by default, or under `results/waiting_room/` in the scheduled workflow. Each job includes local prefilter metadata (`prefilter_pass`, reason, positive matches, and negative matches). OpenAI evaluation skips jobs rejected by this local prefilter and writes them as discards without an API call.
 
 ## Classify latest scrape
 
@@ -40,9 +40,10 @@ OpenAI mode asks the model whether the job is a rare "unicorn" match for the can
 
 The OpenAI matcher runs in two stages:
 
-1. One batch triage call reads the profile once and scans all newly scraped ads.
-2. Only ads selected for the temporary candidate list get a second, stateless confirmation call.
-3. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
+1. A local permissive prefilter removes obvious non-matches.
+2. One batch triage call reads the profile once and scans all prefilter-passing ads.
+3. Only ads selected for the temporary candidate list get a second, stateless confirmation call.
+4. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
 
 Local usage:
 
@@ -51,6 +52,8 @@ OPENAI_API_KEY=... python3 match_jobs.py --latest --matcher openai --job-profile
 ```
 
 The profile file may be plain text or RTF. Local profile files named `job_profile.txt` or `job_profile.rtf` are ignored by git.
+
+Waiting-room evaluation can cap OpenAI spend with `--llm-limit N`. Prefilter-passing jobs above that cap are requeued in `results/waiting_room/<timestamp>/deferred_jobs.json` for a later evaluation instead of being discarded.
 
 GitHub Actions usage:
 
@@ -74,18 +77,18 @@ Each workflow run that passes the schedule gate sends a Telegram message with th
 
 ## GitHub Actions scheduling
 
-The `Job Search` workflow runs from `.github/workflows/job-search.yml`. It currently has two triggers:
+Scheduling is split across two workflows:
 
-- `workflow_dispatch`, for manual runs from GitHub Actions.
-- `schedule` with `cron: "17 * * * *"`, for automatic hourly runs at minute 17.
+- `.github/workflows/job-search-scheduler.yml` runs hourly and dispatches the execution workflow.
+- `.github/workflows/job-search.yml` performs Koofr sync, scraping, optional evaluation, Telegram notification, and upload.
 
-GitHub cron schedules are always interpreted in UTC. The workflow converts the scheduled UTC time to `Europe/Stockholm` before deciding whether to send a Telegram report. Scraping, matching, Koofr download, and Koofr upload run every scheduled hour; Telegram reporting is gated to scheduled local hours `07` and `19`.
+GitHub cron schedules are always interpreted in UTC. The scheduler converts the scheduled UTC time to `Europe/Stockholm` before deciding whether to dispatch an evaluation run. Scraping, Koofr download, and Koofr upload run every scheduled hour; matching and Telegram reporting are gated to scheduled local hours `07` and `19`.
 
 To customize the schedule:
 
-1. Change the cron expression under `on.schedule` in `.github/workflows/job-search.yml`.
-2. Change the report hours in the `Resolve schedule gates` step if Telegram summaries should be sent at different local hours.
-3. Change each `TZ=Europe/Stockholm` value in that step if the reporting gate should use a different local timezone.
+1. Change the cron expressions under `on.schedule` in `.github/workflows/job-search-scheduler.yml`.
+2. Change the report hours in the scheduler dispatch step if Telegram summaries should be sent at different local hours.
+3. Change each `TZ=Europe/Stockholm` value in the scheduler if the reporting gate should use a different local timezone.
 
 Examples:
 
@@ -97,7 +100,7 @@ Examples:
 - cron: "17 6,18 * * *"
 ```
 
-Manual runs always enable Telegram reporting, regardless of the scheduled report hours.
+Manual runs of `job-search.yml` enable Telegram reporting by default. Manual runs of the scheduler use the current Stockholm hour to decide the dispatched `report_job` value.
 
 Each matching run writes an audit file next to the discard output:
 

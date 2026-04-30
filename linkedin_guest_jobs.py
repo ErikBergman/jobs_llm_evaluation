@@ -30,6 +30,7 @@ DEFAULT_RESULTS_BUCKET = "discard"
 WAITING_ROOM_BUCKET = "waiting_room"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
 DEFAULT_MAX_SEARCH_PAGES = 2
+DEFAULT_GUEST_PAGE_SIZE = 10
 DEFAULT_REQUEST_DELAY_SECONDS = 0.0
 DEFAULT_CHEAT_AD_NAME = "cheat_mode_job_ad.rtf"
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
@@ -62,6 +63,80 @@ SEARCH_FIELD_ALIASES = {
     "f_PP": ("f_PP", "place_ids"),
     "sortBy": ("sortBy", "sort_by"),
 }
+PREFILTER_POSITIVE_KEYWORDS = (
+    "developer",
+    "software",
+    "engineer",
+    "backend",
+    "frontend",
+    "automation",
+    "integration",
+    "python",
+    "systems",
+    "system",
+    "AI",
+    "data",
+    "laboratory",
+    "LIMS",
+    "biotechnology",
+    "chemical",
+    "research",
+    "validation",
+    "QA",
+    "platform",
+    "tools",
+    "life science",
+    "project assistant",
+    "postdoc",
+    "scientist",
+    "mechanical engineer",
+    "product development",
+    "utvecklare",
+    "mjukvara",
+    "ingenjör",
+    "mekanikingenjör",
+    "system",
+    "automatisering",
+    "integration",
+    "laboratorie",
+    "forskare",
+    "forskning",
+    "validering",
+    "kvalitet",
+    "plattform",
+    "verktyg",
+    "projektassistent",
+    "biologi",
+    "postdoktor",
+    "onkologi",
+    "krisberedskap",
+    "civilt försvar",
+    "utveckling",
+)
+PREFILTER_NEGATIVE_KEYWORDS = (
+    "sjuksköterska",
+    "lärare",
+    "restaurang",
+    "säljare",
+    "butik",
+    "kundcenter",
+    "elevassistent",
+    "köksmästare",
+    "farmaceut",
+    "psykolog",
+)
+PREFILTER_NEGATIVE_CATEGORIES = {
+    "sjuksköterska": "healthcare",
+    "farmaceut": "pharmacy",
+    "psykolog": "healthcare",
+    "lärare": "teaching",
+    "elevassistent": "school support",
+    "restaurang": "restaurant",
+    "köksmästare": "restaurant",
+    "säljare": "sales",
+    "butik": "retail",
+    "kundcenter": "customer service",
+}
 
 
 @dataclass
@@ -81,6 +156,10 @@ class JobCard:
 @dataclass
 class JobDetail(JobCard):
     description: str = ""
+    prefilter_pass: bool = True
+    prefilter_reason: str = ""
+    prefilter_positive_matches: list[str] = field(default_factory=list)
+    prefilter_negative_matches: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -89,11 +168,106 @@ class SearchAudit:
     pages_requested: int = 0
     results_seen: int = 0
     already_in_memory: int = 0
+    passed_prefilter: int = 0
     throttled: bool = False
 
 
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", unescape(value)).strip()
+
+
+def keyword_pattern(keyword: str) -> re.Pattern[str]:
+    escaped = re.escape(keyword).replace(r"\ ", r"\s+")
+    return re.compile(rf"(?<![\wåäöÅÄÖ]){escaped}(?![\wåäöÅÄÖ])", re.IGNORECASE)
+
+
+PREFILTER_POSITIVE_PATTERNS = tuple(
+    (keyword, keyword_pattern(keyword))
+    for keyword in dict.fromkeys(PREFILTER_POSITIVE_KEYWORDS)
+)
+PREFILTER_NEGATIVE_PATTERNS = tuple(
+    (keyword, keyword_pattern(keyword))
+    for keyword in dict.fromkeys(PREFILTER_NEGATIVE_KEYWORDS)
+)
+
+
+def unique_preserving_order(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        output.append(value)
+    return output
+
+
+def keyword_matches(text: str, patterns: Iterable[tuple[str, re.Pattern[str]]]) -> list[str]:
+    return [keyword for keyword, pattern in patterns if pattern.search(text)]
+
+
+def prefilter_text_fields(job: dict[str, object]) -> list[tuple[str, str]]:
+    source_searches = job.get("source_searches")
+    if isinstance(source_searches, list):
+        sources = " ".join(str(source) for source in source_searches)
+    elif source_searches not in (None, ""):
+        sources = str(source_searches)
+    else:
+        sources = ""
+    return [
+        ("title", str(job.get("title") or "")),
+        ("company", str(job.get("company") or "")),
+        ("location", str(job.get("location") or "")),
+        ("description", str(job.get("description") or "")),
+        ("source_searches", sources),
+    ]
+
+
+def prefilter_job(job: dict[str, object]) -> dict[str, object]:
+    fields = prefilter_text_fields(job)
+    positive_by_field: list[tuple[str, str]] = []
+    negative_matches: list[str] = []
+    for field_name, text in fields:
+        if not text:
+            continue
+        for keyword in keyword_matches(text, PREFILTER_POSITIVE_PATTERNS):
+            positive_by_field.append((field_name, keyword))
+        negative_matches.extend(keyword_matches(text, PREFILTER_NEGATIVE_PATTERNS))
+
+    positive_matches = unique_preserving_order(keyword for _, keyword in positive_by_field)
+    negative_matches = unique_preserving_order(negative_matches)
+    if positive_matches:
+        field_name, keyword = positive_by_field[0]
+        reason = f"Matched {field_name} keyword: {keyword}"
+        passed = True
+    elif negative_matches:
+        keyword = negative_matches[0]
+        category = PREFILTER_NEGATIVE_CATEGORIES.get(keyword, "non-match")
+        reason = f"Rejected obvious {category} role: {keyword}"
+        passed = False
+    else:
+        reason = "No obvious rejection keyword matched; permissive borderline pass."
+        passed = True
+
+    return {
+        "prefilter_pass": passed,
+        "prefilter_reason": reason,
+        "prefilter_positive_matches": positive_matches,
+        "prefilter_negative_matches": negative_matches,
+    }
+
+
+def apply_prefilter_metadata(job: JobDetail) -> JobDetail:
+    metadata = prefilter_job(asdict(job))
+    job.prefilter_pass = bool(metadata["prefilter_pass"])
+    job.prefilter_reason = str(metadata["prefilter_reason"])
+    job.prefilter_positive_matches = list(metadata["prefilter_positive_matches"])
+    job.prefilter_negative_matches = list(metadata["prefilter_negative_matches"])
+    return job
+
+
+def apply_prefilter_metadata_to_jobs(jobs: Iterable[JobDetail]) -> list[JobDetail]:
+    return [apply_prefilter_metadata(job) for job in jobs]
 
 
 def rtf_to_text(rtf: str) -> str:
@@ -596,18 +770,20 @@ def search_label(search_url: str) -> str:
     if keywords:
         return keywords
     geo_id = params.get("geoId", "").strip()
-    return f"geoId={geo_id}" if geo_id else search_url
+    return "geo-only" if geo_id else search_url
 
 
 def collect_cards(
     search_url: str,
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    page_size: int = DEFAULT_GUEST_PAGE_SIZE,
     request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
     audit: SearchAudit | None = None,
 ) -> list[JobCard]:
     cards: list[JobCard] = []
     start = 0
+    offset_step = max(page_size, 1)
     for _ in range(max_pages):
         url = guest_search_url(search_url, start=start)
         if audit is not None:
@@ -627,7 +803,9 @@ def collect_cards(
         if audit is not None:
             audit.results_seen += len(page_cards)
         cards.extend(page_cards)
-        start += len(page_cards)
+        if len(page_cards) < offset_step:
+            break
+        start += offset_step
     return cards
 
 
@@ -636,6 +814,7 @@ def collect_unseen_cards(
     limit: int,
     seen_job_ids: set[str],
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    page_size: int = DEFAULT_GUEST_PAGE_SIZE,
     request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
 ) -> list[JobCard]:
@@ -644,6 +823,7 @@ def collect_unseen_cards(
     cards = collect_cards(
         search_url,
         max_pages=max_pages,
+        page_size=page_size,
         request_delay_seconds=request_delay_seconds,
         fetch_html=fetch_html,
     )
@@ -655,6 +835,7 @@ def collect_unseen_cards_from_search_urls(
     limit: int,
     seen_job_ids: set[str],
     max_pages: int = DEFAULT_MAX_SEARCH_PAGES,
+    page_size: int = DEFAULT_GUEST_PAGE_SIZE,
     request_delay_seconds: float = DEFAULT_REQUEST_DELAY_SECONDS,
     fetch_html: Callable[[str], str] = fetch,
     audits: list[SearchAudit] | None = None,
@@ -671,6 +852,7 @@ def collect_unseen_cards_from_search_urls(
         for card in collect_cards(
             search_url,
             max_pages=max_pages,
+            page_size=page_size,
             request_delay_seconds=request_delay_seconds,
             fetch_html=fetch_html,
             audit=audit,
@@ -687,20 +869,111 @@ def collect_unseen_cards_from_search_urls(
     return select_unseen_cards(sort_cards_by_latest_posted(cards_by_id.values()), seen_job_ids, limit)
 
 
-def format_search_audit_table(audits: Iterable[SearchAudit]) -> str:
+def job_prefilter_passes(job: JobDetail | dict[str, object]) -> bool:
+    if isinstance(job, JobDetail):
+        return job.prefilter_pass
+    return job.get("prefilter_pass") is not False
+
+
+def update_audits_with_prefilter_counts(audits: Iterable[SearchAudit], jobs: Iterable[JobDetail]) -> None:
+    audits_by_search = {audit.search: audit for audit in audits}
+    for audit in audits_by_search.values():
+        audit.passed_prefilter = 0
+    for job in jobs:
+        if not job.prefilter_pass:
+            continue
+        for source in job.source_searches:
+            audit = audits_by_search.get(source)
+            if audit is not None:
+                audit.passed_prefilter += 1
+
+
+def is_geo_only_label(label: str) -> bool:
+    return label == "geo-only" or label.startswith("geoId=")
+
+
+def job_identity(job: JobDetail | dict[str, object]) -> str:
+    job_id = job.job_id if isinstance(job, JobDetail) else job.get("job_id")
+    if job_id not in (None, ""):
+        return str(job_id)
+    return json.dumps(asdict(job) if isinstance(job, JobDetail) else job, sort_keys=True, ensure_ascii=False)
+
+
+def format_geo_coverage_section(
+    audits: Iterable[SearchAudit],
+    jobs: Iterable[JobDetail | dict[str, object]] = (),
+) -> str:
+    audit_list = list(audits)
+    job_list = list(jobs)
+    geo_audits = [audit for audit in audit_list if is_geo_only_label(audit.search)]
+    if not geo_audits:
+        return ""
+
+    unique_jobs = {job_identity(job): job for job in job_list}
+    geo_visible_jobs = sum(audit.results_seen for audit in geo_audits)
+    already_in_memory = sum(audit.already_in_memory for audit in geo_audits)
+    seen_by_keyword = 0
+    geo_only_only = 0
+    passed_prefilter = 0
+    rejected_prefilter = 0
+    for job in unique_jobs.values():
+        sources = job.source_searches if isinstance(job, JobDetail) else job.get("source_searches", [])
+        source_labels = [str(source) for source in sources] if isinstance(sources, list) else [str(sources)]
+        has_geo = any(is_geo_only_label(source) for source in source_labels)
+        has_keyword = any(not is_geo_only_label(source) and source != "unknown" for source in source_labels)
+        if has_geo and has_keyword:
+            seen_by_keyword += 1
+        elif has_geo:
+            geo_only_only += 1
+        if job_prefilter_passes(job):
+            passed_prefilter += 1
+        else:
+            rejected_prefilter += 1
+
+    rows = [
+        ("Geo-visible jobs", geo_visible_jobs),
+        ("Seen by keyword searches", seen_by_keyword),
+        ("Geo-only only", geo_only_only),
+        ("Already in memory", already_in_memory),
+        ("New to memory", len(unique_jobs)),
+        ("Passed prefilter", passed_prefilter),
+        ("Rejected by prefilter", rejected_prefilter),
+    ]
+    width = max(len(label) for label, _ in rows)
+    lines = ["Geo coverage"]
+    lines.extend(f"{label.ljust(width)}  {value}" for label, value in rows)
+    return "\n".join(lines)
+
+
+def format_search_audit_table(
+    audits: Iterable[SearchAudit],
+    jobs: Iterable[JobDetail | dict[str, object]] = (),
+) -> str:
+    audit_list = list(audits)
+    job_list = list(jobs)
     rows = [
         (
             audit.search,
             str(audit.pages_requested),
             str(audit.results_seen),
             str(audit.already_in_memory),
+            str(audit.passed_prefilter),
             "",
             "",
             "yes" if audit.throttled else "no",
         )
-        for audit in audits
+        for audit in audit_list
     ]
-    headers = ("Search", "Pages", "Looked at", "Already in memory", "Passed 1st layer LLM", "Hits", "Throttled")
+    headers = (
+        "Search",
+        "Pages",
+        "Looked at",
+        "Already in memory",
+        "Passed prefilter",
+        "Passed 1st layer LLM",
+        "Hits",
+        "Throttled",
+    )
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows)) if rows else len(headers[index])
         for index in range(len(headers))
@@ -709,12 +982,15 @@ def format_search_audit_table(audits: Iterable[SearchAudit]) -> str:
     def border() -> str:
         return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
 
-    def render_row(values: tuple[str, str, str, str]) -> str:
+    def render_row(values: tuple[str, ...]) -> str:
         return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(values)) + " |"
 
     lines = ["Search audit", border(), render_row(headers), border()]
     lines.extend(render_row(row) for row in rows)
     lines.append(border())
+    geo_coverage = format_geo_coverage_section(audit_list, job_list)
+    if geo_coverage:
+        lines.extend(["", geo_coverage])
     return "\n".join(lines)
 
 
@@ -863,7 +1139,24 @@ def timestamped_output_path(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH, help="Search input JSON path")
-    parser.add_argument("--limit", type=int, default=2, help="Number of new jobs to fetch")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=int(os.environ.get("JOB_SEARCH_LIMIT", "2")),
+        help="Backward-compatible alias for --card-limit when --card-limit is omitted",
+    )
+    parser.add_argument(
+        "--card-limit",
+        type=int,
+        default=None,
+        help="Maximum number of newly discovered cards to keep before detail fetch",
+    )
+    parser.add_argument(
+        "--detail-limit",
+        type=int,
+        default=None,
+        help="Maximum number of discovered cards to fetch details for",
+    )
     parser.add_argument("--output", default=DEFAULT_OUTPUT_NAME, help="JSON output filename")
     parser.add_argument("--results-root", type=Path, default=DEFAULT_RESULTS_ROOT, help="Results memory root")
     parser.add_argument(
@@ -873,6 +1166,12 @@ def main() -> int:
         help="Results bucket to write scraped jobs into",
     )
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_SEARCH_PAGES, help="Maximum search pages to scan")
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        default=int(os.environ.get("JOB_SEARCH_PAGE_SIZE", DEFAULT_GUEST_PAGE_SIZE)),
+        help="LinkedIn guest search page offset step",
+    )
     parser.add_argument(
         "--request-delay",
         type=float,
@@ -887,23 +1186,28 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    card_limit = args.card_limit if args.card_limit is not None else args.limit
+    detail_limit = args.detail_limit if args.detail_limit is not None else card_limit
     search_urls = search_urls_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
     search_audits: list[SearchAudit] = []
     cards = collect_unseen_cards_from_search_urls(
         search_urls,
-        args.limit,
+        card_limit,
         seen_job_ids,
         max_pages=args.max_pages,
+        page_size=args.page_size,
         request_delay_seconds=args.request_delay,
         audits=search_audits,
     )
-    jobs = fetch_job_details(cards, request_delay_seconds=args.request_delay)
+    jobs = fetch_job_details(cards[: max(detail_limit, 0)], request_delay_seconds=args.request_delay)
     if env_flag_enabled("CHEAT_MODE"):
         jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))
+    jobs = apply_prefilter_metadata_to_jobs(jobs)
+    update_audits_with_prefilter_counts(search_audits, jobs)
 
     if not jobs:
-        print(format_search_audit_table(search_audits))
+        print(format_search_audit_table(search_audits, jobs))
         print("No new public job cards found.", file=sys.stderr)
         return 1
 
@@ -916,7 +1220,7 @@ def main() -> int:
 
     print(f"Wrote {output_path}")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    print(format_search_audit_table(search_audits))
+    print(format_search_audit_table(search_audits, jobs))
     return 0
 
 

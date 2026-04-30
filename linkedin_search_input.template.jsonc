@@ -4,8 +4,9 @@
   // "search_url": "https://www.linkedin.com/jobs/search-results/?keywords=engineer&geoId=105734258&distance=0.0&f_TPR=r86400",
 
   // Field-based path: omit search_url and the script builds a LinkedIn search URL.
+  // Preferred discovery is geo-only. Add keyword searches only as extra labels.
   // Boolean logic is accepted by LinkedIn in keywords, e.g. "\"Python\" OR \"Backend\"".
-  "keywords": "engineer in lund",
+  // "keywords": "engineer in lund",
 
   // Optional location text. geo_id is usually more stable when you can get it from a LinkedIn URL.
   // "location": "Lund, Skane County, Sweden",

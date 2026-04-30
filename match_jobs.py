@@ -768,6 +768,69 @@ def job_source_searches(job: dict[str, Any]) -> list[str]:
     return ["unknown"]
 
 
+def job_prefilter_passes(job: dict[str, Any]) -> bool:
+    return job.get("prefilter_pass") is not False
+
+
+def prefilter_rejection_decision(job: dict[str, Any]) -> dict[str, Any]:
+    reason = job.get("prefilter_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        reason = "Rejected by local pre-LLM prefilter."
+    return {
+        "job_id": job.get("job_id"),
+        "title": job.get("title"),
+        "hit": False,
+        "reason": reason,
+        "matcher": "prefilter",
+        "stage": "prefilter",
+        "prefilter_positive_matches": job.get("prefilter_positive_matches", []),
+        "prefilter_negative_matches": job.get("prefilter_negative_matches", []),
+    }
+
+
+def apply_prefilter_to_decisions(
+    jobs: list[dict[str, Any]],
+    decisions_provider: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    passing_jobs: list[dict[str, Any]] = []
+    passing_indexes: list[int] = []
+    decisions: list[dict[str, Any] | None] = [None] * len(jobs)
+    for index, job in enumerate(jobs):
+        if job_prefilter_passes(job):
+            passing_jobs.append(job)
+            passing_indexes.append(index)
+        else:
+            decisions[index] = prefilter_rejection_decision(job)
+
+    if passing_jobs:
+        passing_decisions = decisions_provider(passing_jobs)
+        if len(passing_decisions) != len(passing_jobs):
+            raise ValueError("Decision count must match prefilter-passing job count")
+        for index, decision in zip(passing_indexes, passing_decisions):
+            decisions[index] = decision
+
+    return [decision for decision in decisions if decision is not None]
+
+
+def openai_prefiltered_two_stage_decisions(
+    jobs: list[dict[str, Any]],
+    api_key: str,
+    profile: str,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    return apply_prefilter_to_decisions(
+        jobs,
+        lambda passing_jobs: openai_two_stage_decisions(
+            passing_jobs,
+            api_key,
+            profile,
+            model=model,
+            post_json=post_json,
+        ),
+    )
+
+
 def append_llm_search_stats(
     output_root: Path,
     jobs: list[dict[str, Any]],
@@ -787,6 +850,8 @@ def append_llm_search_stats(
                 search,
                 {
                     "new_ads": 0,
+                    "passed_prefilter": 0,
+                    "rejected_by_prefilter": 0,
                     "triaged_ads": 0,
                     "confirmation_candidates": 0,
                     "matches": 0,
@@ -795,6 +860,10 @@ def append_llm_search_stats(
                 },
             )
             row["new_ads"] += 1
+            if decision.get("stage") == "prefilter":
+                row["rejected_by_prefilter"] += 1
+                continue
+            row["passed_prefilter"] += 1
             row["triaged_ads"] += 1
             if decision.get("stage") == "confirmation":
                 row["confirmation_candidates"] += 1
@@ -816,6 +885,8 @@ def append_llm_search_stats(
         "model",
         "search_term",
         "new_ads",
+        "passed_prefilter",
+        "rejected_by_prefilter",
         "triaged_ads",
         "confirmation_candidates",
         "matches",
@@ -875,11 +946,13 @@ def merge_search_audits(audits: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "results_seen": 0,
                 "already_in_memory": 0,
                 "throttled": False,
+                "passed_prefilter": 0,
             },
         )
         row["pages_requested"] += int(audit.get("pages_requested") or 0)
         row["results_seen"] += int(audit.get("results_seen") or 0)
         row["already_in_memory"] += int(audit.get("already_in_memory") or 0)
+        row["passed_prefilter"] += int(audit.get("passed_prefilter") or 0)
         row["throttled"] = bool(row["throttled"] or audit.get("throttled"))
     return [merged[search] for search in sorted(merged)]
 
@@ -898,12 +971,63 @@ def llm_counts_by_search(jobs: list[dict[str, Any]], decisions: list[dict[str, A
     counts: dict[str, dict[str, int]] = {}
     for job, decision in zip(jobs, decisions):
         for search in job_source_searches(job):
-            row = counts.setdefault(search, {"passed_first_layer": 0, "hits": 0})
+            row = counts.setdefault(search, {"passed_prefilter": 0, "passed_first_layer": 0, "hits": 0})
+            if decision.get("stage") != "prefilter":
+                row["passed_prefilter"] += 1
             if decision.get("stage") == "confirmation":
                 row["passed_first_layer"] += 1
             if decision.get("hit") is True:
                 row["hits"] += 1
     return counts
+
+
+def is_geo_only_label(label: str) -> bool:
+    return label == "geo-only" or label.startswith("geoId=")
+
+
+def format_geo_coverage_section(audits: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> str:
+    geo_audits = [audit for audit in audits if is_geo_only_label(str(audit.get("search") or ""))]
+    if not geo_audits:
+        return ""
+
+    geo_visible_jobs = sum(int(audit.get("results_seen") or 0) for audit in geo_audits)
+    already_in_memory = sum(int(audit.get("already_in_memory") or 0) for audit in geo_audits)
+    jobs_by_id: dict[str, dict[str, Any]] = {}
+    for job in jobs:
+        job_id = job.get("job_id")
+        dedupe_key = str(job_id) if job_id not in (None, "") else json.dumps(job, sort_keys=True)
+        jobs_by_id.setdefault(dedupe_key, job)
+
+    seen_by_keyword = 0
+    geo_only_only = 0
+    passed_prefilter = 0
+    rejected_prefilter = 0
+    for job in jobs_by_id.values():
+        sources = job_source_searches(job)
+        has_geo = any(is_geo_only_label(source) for source in sources)
+        has_keyword = any(not is_geo_only_label(source) and source != "unknown" for source in sources)
+        if has_geo and has_keyword:
+            seen_by_keyword += 1
+        elif has_geo:
+            geo_only_only += 1
+        if job_prefilter_passes(job):
+            passed_prefilter += 1
+        else:
+            rejected_prefilter += 1
+
+    rows = [
+        ("Geo-visible jobs", geo_visible_jobs),
+        ("Seen by keyword searches", seen_by_keyword),
+        ("Geo-only only", geo_only_only),
+        ("Already in memory", already_in_memory),
+        ("New to memory", len(jobs_by_id)),
+        ("Passed prefilter", passed_prefilter),
+        ("Rejected by prefilter", rejected_prefilter),
+    ]
+    width = max(len(label) for label, _ in rows)
+    lines = ["Geo coverage"]
+    lines.extend(f"{label.ljust(width)}  {value}" for label, value in rows)
+    return "\n".join(lines)
 
 
 def format_search_evaluation_audit_table(
@@ -921,6 +1045,7 @@ def format_search_evaluation_audit_table(
                 "pages_requested": 0,
                 "results_seen": 0,
                 "already_in_memory": 0,
+                "passed_prefilter": 0,
                 "throttled": False,
             },
         )
@@ -934,13 +1059,23 @@ def format_search_evaluation_audit_table(
                 str(audit.get("pages_requested") or 0),
                 str(audit.get("results_seen") or 0),
                 str(audit.get("already_in_memory") or 0),
+                str(counts.get("passed_prefilter", audit.get("passed_prefilter") or 0)),
                 str(counts.get("passed_first_layer", 0)),
                 str(counts.get("hits", 0)),
                 "yes" if audit.get("throttled") else "no",
             )
         )
 
-    headers = ("Search", "Pages", "Looked at", "Already in memory", "Passed 1st layer LLM", "Hits", "Throttled")
+    headers = (
+        "Search",
+        "Pages",
+        "Looked at",
+        "Already in memory",
+        "Passed prefilter",
+        "Passed 1st layer LLM",
+        "Hits",
+        "Throttled",
+    )
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows)) if rows else len(headers[index])
         for index in range(len(headers))
@@ -949,12 +1084,15 @@ def format_search_evaluation_audit_table(
     def border() -> str:
         return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
 
-    def render_row(values: tuple[str, str, str, str, str, str, str]) -> str:
+    def render_row(values: tuple[str, ...]) -> str:
         return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(values)) + " |"
 
     lines = ["Search evaluation audit", border(), render_row(headers), border()]
     lines.extend(render_row(row) for row in rows)
     lines.append(border())
+    geo_coverage = format_geo_coverage_section(audits, jobs)
+    if geo_coverage:
+        lines.extend(["", geo_coverage])
     return "\n".join(lines)
 
 
@@ -1050,8 +1188,12 @@ def classify_file(
 
 
 def is_unclassified_jobs_json(path: Path) -> bool:
-    return path.suffix == ".json" and not path.name.endswith(
-        ("_hits.json", "_discard.json", "_match_metadata.json", SEARCH_AUDIT_SUFFIX)
+    return (
+        path.suffix == ".json"
+        and path.name != "metadata.json"
+        and not path.name.endswith(
+            ("_hits.json", "_discard.json", "_match_metadata.json", "_metadata.json", SEARCH_AUDIT_SUFFIX)
+        )
     )
 
 
@@ -1087,8 +1229,34 @@ def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
     return list(jobs_by_id.values())
 
 
-def prepare_waiting_room_input(output_root: Path, timestamp: str, output_name: str = "waiting_room_jobs.json") -> Path | None:
-    jobs = load_waiting_room_jobs(output_root)
+def split_waiting_room_jobs_for_llm_limit(
+    jobs: list[dict[str, Any]],
+    llm_limit: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if llm_limit is None:
+        return jobs, []
+
+    selected: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
+    passing_count = 0
+    for job in jobs:
+        if not job_prefilter_passes(job):
+            selected.append(job)
+            continue
+        if passing_count < llm_limit:
+            selected.append(job)
+            passing_count += 1
+        else:
+            deferred.append(job)
+    return selected, deferred
+
+
+def write_waiting_room_input(
+    output_root: Path,
+    timestamp: str,
+    jobs: list[dict[str, Any]],
+    output_name: str = "waiting_room_jobs.json",
+) -> Path | None:
     if not jobs:
         return None
 
@@ -1101,11 +1269,28 @@ def prepare_waiting_room_input(output_root: Path, timestamp: str, output_name: s
     return input_path
 
 
+def prepare_waiting_room_input(
+    output_root: Path,
+    timestamp: str,
+    output_name: str = "waiting_room_jobs.json",
+) -> Path | None:
+    jobs = load_waiting_room_jobs(output_root)
+    return write_waiting_room_input(output_root, timestamp, jobs, output_name=output_name)
+
+
 def clear_waiting_room(output_root: Path) -> None:
     root = waiting_room_root(output_root)
     if root.exists():
         shutil.rmtree(root)
     root.mkdir(parents=True, exist_ok=True)
+
+
+def requeue_waiting_room_jobs(output_root: Path, timestamp: str, jobs: list[dict[str, Any]]) -> Path | None:
+    if not jobs:
+        return None
+    path = waiting_room_root(output_root) / timestamp / "deferred_jobs.json"
+    write_json(path, jobs)
+    return path
 
 
 def latest_discard_run(output_root: Path) -> Path:
@@ -1140,12 +1325,26 @@ def main() -> int:
     parser.add_argument("--matcher", choices=("mock", "openai"), default=DEFAULT_MATCHER, help="Matcher backend")
     parser.add_argument("--openai-model", default=DEFAULT_OPENAI_MODEL, help="OpenAI model for --matcher openai")
     parser.add_argument("--job-profile", type=Path, default=DEFAULT_JOB_PROFILE_PATH, help="Candidate profile text file")
+    env_llm_limit = os.environ.get("JOB_LLM_EVALUATION_LIMIT", "").strip()
+    parser.add_argument(
+        "--llm-limit",
+        type=int,
+        default=int(env_llm_limit) if env_llm_limit else None,
+        help="Maximum prefilter-passing jobs to send to the matcher from one waiting-room evaluation",
+    )
     args = parser.parse_args()
 
     try:
+        deferred_waiting_room_jobs: list[dict[str, Any]] = []
         if args.waiting_room:
             resolved_timestamp = args.timestamp or current_timestamp()
-            input_path = prepare_waiting_room_input(args.output_root, resolved_timestamp)
+            waiting_room_jobs = load_waiting_room_jobs(args.output_root)
+            effective_llm_limit = args.llm_limit if args.matcher == "openai" else None
+            selected_waiting_room_jobs, deferred_waiting_room_jobs = split_waiting_room_jobs_for_llm_limit(
+                waiting_room_jobs,
+                llm_limit=effective_llm_limit,
+            )
+            input_path = write_waiting_room_input(args.output_root, resolved_timestamp, selected_waiting_room_jobs)
             if input_path is None:
                 print(f"No waiting-room jobs found under {waiting_room_root(args.output_root)}.")
                 return 0
@@ -1157,7 +1356,12 @@ def main() -> int:
         if args.matcher == "openai":
             api_key = os.environ.get("OPENAI_API_KEY", "")
             profile = load_job_profile(args.job_profile)
-            decisions_provider = lambda jobs: openai_two_stage_decisions(jobs, api_key, profile, model=args.openai_model)
+            decisions_provider = lambda jobs: openai_prefiltered_two_stage_decisions(
+                jobs,
+                api_key,
+                profile,
+                model=args.openai_model,
+            )
         hits_path, discards_path, metadata_path, metadata = classify_file(
             input_path,
             args.output_root,
@@ -1173,6 +1377,9 @@ def main() -> int:
             print(format_search_evaluation_audit_table(audits, jobs, metadata["decisions"]))
         if args.waiting_room:
             clear_waiting_room(args.output_root)
+            requeued_path = requeue_waiting_room_jobs(args.output_root, resolved_timestamp, deferred_waiting_room_jobs)
+            if requeued_path is not None:
+                print(f"Requeued {len(deferred_waiting_room_jobs)} waiting-room jobs above LLM limit to {requeued_path}")
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

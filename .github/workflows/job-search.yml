@@ -20,10 +20,12 @@ jobs:
   search:
     runs-on: ubuntu-latest
     env:
-      ENTRIES_NUMBER_LIMIT: ${{ vars.ENTRIES_NUMBER_LIMIT || vars.JOB_SEARCH_LIMIT || '8' }}
-      JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '2' }}
+      JOB_SEARCH_CARD_LIMIT: ${{ vars.JOB_SEARCH_CARD_LIMIT || vars.JOB_SEARCH_LIMIT || vars.ENTRIES_NUMBER_LIMIT || '100' }}
+      JOB_SEARCH_DETAIL_LIMIT: ${{ vars.JOB_SEARCH_DETAIL_LIMIT || vars.JOB_SEARCH_CARD_LIMIT || vars.JOB_SEARCH_LIMIT || vars.ENTRIES_NUMBER_LIMIT || '100' }}
+      JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '10' }}
+      JOB_SEARCH_PAGE_SIZE: ${{ vars.JOB_SEARCH_PAGE_SIZE || '10' }}
       JOB_SEARCH_REQUEST_DELAY: ${{ vars.JOB_SEARCH_REQUEST_DELAY || '2' }}
-      JOB_SEARCH_EFFECTIVE_LIMIT: ${{ vars.JOB_SEARCH_EFFECTIVE_LIMIT || '8' }}
+      JOB_LLM_EVALUATION_LIMIT: ${{ vars.JOB_LLM_EVALUATION_LIMIT || '40' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       CHEAT_MODE: ${{ vars.CHEAT_MODE || 'false' }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
@@ -139,25 +141,21 @@ jobs:
         id: scrape
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
-          ENTRIES_NUMBER_LIMIT: ${{ env.ENTRIES_NUMBER_LIMIT }}
+          JOB_SEARCH_CARD_LIMIT: ${{ env.JOB_SEARCH_CARD_LIMIT }}
+          JOB_SEARCH_DETAIL_LIMIT: ${{ env.JOB_SEARCH_DETAIL_LIMIT }}
           JOB_SEARCH_MAX_PAGES: ${{ env.JOB_SEARCH_MAX_PAGES }}
+          JOB_SEARCH_PAGE_SIZE: ${{ env.JOB_SEARCH_PAGE_SIZE }}
           JOB_SEARCH_REQUEST_DELAY: ${{ env.JOB_SEARCH_REQUEST_DELAY }}
-          JOB_SEARCH_EFFECTIVE_LIMIT: ${{ env.JOB_SEARCH_EFFECTIVE_LIMIT }}
         shell: bash
         run: |
-          effective_limit="${ENTRIES_NUMBER_LIMIT}"
-          max_effective_limit="${JOB_SEARCH_EFFECTIVE_LIMIT:-8}"
-          if (( effective_limit > max_effective_limit )); then
-            echo "Capping scrape limit from ${effective_limit} to ${max_effective_limit} to avoid LinkedIn throttling."
-            effective_limit="${max_effective_limit}"
-          fi
-
           set +e
           python3 linkedin_guest_jobs.py \
             --results-root "${RUNTIME_RESULTS_DIR}" \
             --results-bucket waiting_room \
-            --limit "${effective_limit}" \
+            --card-limit "${JOB_SEARCH_CARD_LIMIT}" \
+            --detail-limit "${JOB_SEARCH_DETAIL_LIMIT}" \
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
+            --page-size "${JOB_SEARCH_PAGE_SIZE}" \
             --request-delay "${JOB_SEARCH_REQUEST_DELAY}" \
             --output linkedin_jobs_sample.json 2>&1 | tee scrape.log
           scrape_status="${PIPESTATUS[0]}"
@@ -188,6 +186,7 @@ jobs:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           JOB_MATCHER_MODE: ${{ env.JOB_MATCHER_MODE }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
+          JOB_LLM_EVALUATION_LIMIT: ${{ env.JOB_LLM_EVALUATION_LIMIT }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           JOB_PROFILE_PATH: ${{ env.RUNTIME_RESULTS_DIR }}/job_profile.rtf
         run: |
@@ -206,6 +205,7 @@ jobs:
             --output-root "$RUNTIME_RESULTS_DIR" \
             --matcher "$JOB_MATCHER_MODE" \
             --openai-model "$OPENAI_MODEL" \
+            --llm-limit "$JOB_LLM_EVALUATION_LIMIT" \
             --job-profile "$JOB_PROFILE_PATH" 2>&1 | tee classify.log
           classify_status="${PIPESTATUS[0]}"
           set -e

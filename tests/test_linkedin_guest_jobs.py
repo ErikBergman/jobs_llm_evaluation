@@ -12,6 +12,7 @@ from linkedin_guest_jobs import (
     CHEAT_JOB_ID,
     GUEST_SEARCH_URL,
     JobCard,
+    JobDetail,
     SearchAudit,
     collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
@@ -24,11 +25,13 @@ from linkedin_guest_jobs import (
     load_seen_job_ids,
     main,
     parse_cheat_job_ad,
+    prefilter_job,
     search_url_from_config,
     search_urls_from_config,
     select_unseen_cards,
     search_label,
     sort_cards_by_latest_posted,
+    update_audits_with_prefilter_counts,
 )
 
 
@@ -248,6 +251,7 @@ class SearchUrlTests(unittest.TestCase):
             limit=1,
             seen_job_ids=set(),
             max_pages=2,
+            page_size=1,
             fetch_html=fake_fetch,
         )
 
@@ -362,8 +366,8 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertIn("Search audit", table)
-        self.assertIn("| developer    | 2     | 10        | 0                 |                      |      | no        |", table)
-        self.assertIn("| life science | 1     | 0         | 0                 |                      |      | yes       |", table)
+        self.assertIn("| developer    | 2     | 10        | 0                 | 0                |                      |      | no        |", table)
+        self.assertIn("| life science | 1     | 0         | 0                 | 0                |                      |      | yes       |", table)
 
     def test_search_audit_counts_results_already_in_memory(self) -> None:
         def fake_fetch(_url: str) -> str:
@@ -388,7 +392,7 @@ class SearchUrlTests(unittest.TestCase):
 
     def test_search_label_uses_keywords_or_geo_id(self) -> None:
         self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?keywords=life+science"), "life science")
-        self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?geoId=105734258"), "geoId=105734258")
+        self.assertEqual(search_label("https://www.linkedin.com/jobs/search-results/?geoId=105734258"), "geo-only")
 
     def test_duplicate_cards_remember_all_source_searches(self) -> None:
         def fake_fetch(url: str) -> str:
@@ -434,10 +438,148 @@ class SearchUrlTests(unittest.TestCase):
             limit=2,
             seen_job_ids={"seen"},
             max_pages=3,
+            page_size=2,
             fetch_html=fake_fetch,
         )
 
         self.assertEqual([card.job_id for card in cards], ["new-1", "new-2"])
+
+    def test_collect_cards_uses_page_size_offsets(self) -> None:
+        starts: list[str] = []
+        pages = {
+            "0": "".join(
+                f'<div class="base-card" data-entity-urn="urn:li:jobPosting:first-{index}"></div>'
+                for index in range(10)
+            ),
+            "10": '<div class="base-card" data-entity-urn="urn:li:jobPosting:next-page"></div>',
+        }
+
+        def fake_fetch(url: str) -> str:
+            start = parse_qs(urlparse(url).query)["start"][0]
+            starts.append(start)
+            return pages.get(start, "")
+
+        cards = collect_unseen_cards(
+            "https://www.linkedin.com/jobs/search-results/?geoId=105734258",
+            limit=11,
+            seen_job_ids=set(),
+            max_pages=3,
+            page_size=10,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual(starts, ["0", "10"])
+        self.assertIn("next-page", [card.job_id for card in cards])
+
+    def test_geo_only_jobs_are_retained_without_keyword_search_hit(self) -> None:
+        pages = {
+            "geoId=105734258": """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:geo-only-job">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """,
+            "keywords=developer": "",
+        }
+
+        def fake_fetch(url: str) -> str:
+            if "keywords=developer" in url:
+                return pages["keywords=developer"]
+            if "geoId=105734258" in url:
+                return pages["geoId=105734258"]
+            return ""
+
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?geoId=105734258",
+                "https://www.linkedin.com/jobs/search-results/?keywords=developer&geoId=105734258",
+            ],
+            limit=2,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual([card.job_id for card in cards], ["geo-only-job"])
+        self.assertEqual(cards[0].source_searches, ["geo-only"])
+
+    def test_geo_only_and_keyword_source_searches_are_merged(self) -> None:
+        def fake_fetch(_url: str) -> str:
+            return """
+                <div class="base-card" data-entity-urn="urn:li:jobPosting:duplicate">
+                    <time class="job-search-card__listdate--new" datetime="2026-04-28">9 minutes ago</time>
+                </div>
+            """
+
+        cards = collect_unseen_cards_from_search_urls(
+            [
+                "https://www.linkedin.com/jobs/search-results/?geoId=105734258",
+                "https://www.linkedin.com/jobs/search-results/?keywords=python&geoId=105734258",
+            ],
+            limit=2,
+            seen_job_ids=set(),
+            max_pages=1,
+            fetch_html=fake_fetch,
+        )
+
+        self.assertEqual(cards[0].source_searches, ["geo-only", "python"])
+
+    def test_prefilter_accepts_obvious_relevant_jobs(self) -> None:
+        decision = prefilter_job(
+            {
+                "title": "Backend Python Developer",
+                "company": "Example AB",
+                "location": "Lund",
+                "description": "Build integrations.",
+                "source_searches": ["geo-only"],
+            }
+        )
+
+        self.assertTrue(decision["prefilter_pass"])
+        self.assertIn("python", decision["prefilter_positive_matches"])
+
+    def test_prefilter_rejects_obvious_irrelevant_jobs(self) -> None:
+        decision = prefilter_job(
+            {
+                "title": "Sjuksköterska till vårdavdelning",
+                "description": "Patientnära arbete.",
+                "source_searches": ["geo-only"],
+            }
+        )
+
+        self.assertFalse(decision["prefilter_pass"])
+        self.assertEqual(decision["prefilter_negative_matches"], ["sjuksköterska"])
+
+    def test_prefilter_allows_borderline_scientific_and_technical_jobs(self) -> None:
+        titles = [
+            "Projektassistent i biologi",
+            "Postdoktor i experimentell onkologi",
+            "Konsult krisberedskap och civilt försvar",
+            "Erfaren mekanikingenjör för utveckling av intressanta produkter",
+        ]
+
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertTrue(prefilter_job({"title": title})["prefilter_pass"])
+
+    def test_search_audit_table_includes_prefilter_counts_and_geo_coverage(self) -> None:
+        audits = [
+            SearchAudit(search="geo-only", pages_requested=1, results_seen=3, already_in_memory=1),
+            SearchAudit(search="python", pages_requested=1, results_seen=1, already_in_memory=0),
+        ]
+        detailed_jobs = [
+            JobDetail("1", source_searches=["geo-only", "python"], prefilter_pass=True),
+            JobDetail("2", source_searches=["geo-only"], prefilter_pass=False),
+        ]
+        update_audits_with_prefilter_counts(audits, detailed_jobs)
+
+        table = format_search_audit_table(audits, detailed_jobs)
+
+        self.assertIn("Passed prefilter", table)
+        self.assertIn("| geo-only | 1     | 3         | 1                 | 1", table)
+        self.assertIn("Geo coverage", table)
+        self.assertIn("Geo-visible jobs          3", table)
+        self.assertIn("Geo-only only             1", table)
+        self.assertIn("Rejected by prefilter     1", table)
 
     def test_env_flag_enabled_accepts_github_variable_true(self) -> None:
         self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "true"}))
