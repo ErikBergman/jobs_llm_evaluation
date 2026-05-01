@@ -38,11 +38,11 @@ The matcher also has an OpenAI mode. It is intentionally not the default, becaus
 
 OpenAI mode asks the model whether the job is a rare "unicorn" match for the candidate profile. It should only put a small fraction of unusually strong matches in `hits`; generic keyword overlap should stay in `discard`. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
 
-The OpenAI matcher runs in two stages:
+The evaluation flow uses three user-facing stages:
 
-1. A local permissive prefilter removes obvious non-matches.
-2. One batch triage call reads the profile once and scans all prefilter-passing ads.
-3. Only ads selected for the temporary candidate list get a second, stateless confirmation call.
+1. Eval 1: Keywords removes obvious non-matches with a permissive local keyword screen.
+2. Eval 2: LLM triage reads the profile once and scans all Eval 1-passing ads.
+3. Eval 3: LLM confirmation performs a second, stateless review of jobs selected by triage.
 4. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
 
 Local usage:
@@ -108,7 +108,7 @@ Each matching run writes an audit file next to the discard output:
 results/discard/<timestamp>/linkedin_jobs_sample_match_metadata.json
 ```
 
-The workflow log also prints one `[decision]` line per job with the job ID, hit value, title, and reason.
+The workflow log also prints one `[decision]` line per job with the job ID, evaluation stage, hit value, title, and reason.
 
 ## Open-Source TODO
 

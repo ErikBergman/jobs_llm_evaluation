@@ -612,7 +612,7 @@ def openai_two_stage_decisions(
                 "job_id": job.get("job_id"),
                 "title": job.get("title"),
                 "hit": False,
-                "reason": "Rejected by first-stage OpenAI triage.",
+                "reason": "Rejected by Eval 2: LLM triage.",
                 "matcher": "openai",
                 "model": triage["model"],
                 "usage": None,
@@ -775,7 +775,7 @@ def job_prefilter_passes(job: dict[str, Any]) -> bool:
 def prefilter_rejection_decision(job: dict[str, Any]) -> dict[str, Any]:
     reason = job.get("prefilter_reason")
     if not isinstance(reason, str) or not reason.strip():
-        reason = "Rejected by local pre-LLM prefilter."
+        reason = "Rejected by Eval 1: Keywords."
     return {
         "job_id": job.get("job_id"),
         "title": job.get("title"),
@@ -829,6 +829,19 @@ def openai_prefiltered_two_stage_decisions(
             post_json=post_json,
         ),
     )
+
+
+def decision_eval_stage_label(decision: dict[str, Any]) -> str:
+    stage = decision.get("stage")
+    if stage == "prefilter":
+        return "Eval 1: Keywords"
+    if stage == "triage":
+        return "Eval 2: LLM triage"
+    if stage == "confirmation":
+        return "Eval 3: LLM confirmation"
+    if decision.get("hit") is True:
+        return "Eval 3: LLM confirmation"
+    return "unknown"
 
 
 def append_llm_search_stats(
@@ -1021,8 +1034,8 @@ def format_geo_coverage_section(audits: list[dict[str, Any]], jobs: list[dict[st
         ("Geo-only only", geo_only_only),
         ("Already in memory", already_in_memory),
         ("New to memory", len(jobs_by_id)),
-        ("Passed prefilter", passed_prefilter),
-        ("Rejected by prefilter", rejected_prefilter),
+        ("Passed Eval 1: Keywords", passed_prefilter),
+        ("Rejected by Eval 1: Keywords", rejected_prefilter),
     ]
     width = max(len(label) for label, _ in rows)
     lines = ["Geo coverage"]
@@ -1071,9 +1084,9 @@ def format_search_evaluation_audit_table(
         "Pages",
         "Looked at",
         "Already in memory",
-        "Passed prefilter",
-        "Passed 1st layer LLM",
-        "Hits",
+        "Eval 1: Keywords",
+        "Eval 2: LLM triage",
+        "Eval 3: LLM confirmation",
         "Throttled",
     )
     widths = [
@@ -1387,6 +1400,7 @@ def main() -> int:
         print(
             "[decision] "
             f"job_id={decision.get('job_id')} "
+            f"eval_stage={decision_eval_stage_label(decision)!r} "
             f"hit={str(decision.get('hit')).lower()} "
             f"title={decision.get('title')!r} "
             f"reason={decision.get('reason')!r}"

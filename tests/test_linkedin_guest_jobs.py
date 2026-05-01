@@ -366,8 +366,8 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertIn("Search audit", table)
-        self.assertIn("| developer    | 2     | 10        | 0                 | 0                |                      |      | no        |", table)
-        self.assertIn("| life science | 1     | 0         | 0                 | 0                |                      |      | yes       |", table)
+        self.assertIn("| developer    | 2     | 10        | 0                 | 0                |                    |                          | no        |", table)
+        self.assertIn("| life science | 1     | 0         | 0                 | 0                |                    |                          | yes       |", table)
 
     def test_search_audit_counts_results_already_in_memory(self) -> None:
         def fake_fetch(_url: str) -> str:
@@ -574,12 +574,12 @@ class SearchUrlTests(unittest.TestCase):
 
         table = format_search_audit_table(audits, detailed_jobs)
 
-        self.assertIn("Passed prefilter", table)
+        self.assertIn("Eval 1: Keywords", table)
         self.assertIn("| geo-only | 1     | 3         | 1                 | 1", table)
         self.assertIn("Geo coverage", table)
-        self.assertIn("Geo-visible jobs          3", table)
-        self.assertIn("Geo-only only             1", table)
-        self.assertIn("Rejected by prefilter     1", table)
+        self.assertIn("Geo-visible jobs              3", table)
+        self.assertIn("Geo-only only                 1", table)
+        self.assertIn("Rejected by Eval 1: Keywords  1", table)
 
     def test_env_flag_enabled_accepts_github_variable_true(self) -> None:
         self.assertTrue(env_flag_enabled("CHEAT_MODE", {"CHEAT_MODE": "true"}))

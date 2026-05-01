@@ -936,8 +936,8 @@ def format_geo_coverage_section(
         ("Geo-only only", geo_only_only),
         ("Already in memory", already_in_memory),
         ("New to memory", len(unique_jobs)),
-        ("Passed prefilter", passed_prefilter),
-        ("Rejected by prefilter", rejected_prefilter),
+        ("Passed Eval 1: Keywords", passed_prefilter),
+        ("Rejected by Eval 1: Keywords", rejected_prefilter),
     ]
     width = max(len(label) for label, _ in rows)
     lines = ["Geo coverage"]
@@ -969,9 +969,9 @@ def format_search_audit_table(
         "Pages",
         "Looked at",
         "Already in memory",
-        "Passed prefilter",
-        "Passed 1st layer LLM",
-        "Hits",
+        "Eval 1: Keywords",
+        "Eval 2: LLM triage",
+        "Eval 3: LLM confirmation",
         "Throttled",
     )
     widths = [

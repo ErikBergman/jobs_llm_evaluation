@@ -23,6 +23,7 @@ from match_jobs import (
     clear_waiting_room,
     append_llm_search_stats,
     apply_prefilter_to_decisions,
+    decision_eval_stage_label,
     env_flag_enabled,
     extract_response_text,
     format_search_evaluation_audit_table,
@@ -372,7 +373,7 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decisions[0]["stage"], "confirmation")
         self.assertEqual(decisions[0]["triage_reason"], "Rare domain overlap.")
         self.assertEqual(decisions[1]["stage"], "triage")
-        self.assertEqual(decisions[1]["reason"], "Rejected by first-stage OpenAI triage.")
+        self.assertEqual(decisions[1]["reason"], "Rejected by Eval 2: LLM triage.")
         self.assertEqual(decisions[0]["triage_candidate_count"], 1)
         self.assertEqual(decisions[1]["triage_candidate_count"], 1)
         self.assertEqual(decisions[0]["usage"], {"input_tokens": 300, "output_tokens": 30})
@@ -440,6 +441,11 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(len(decisions), 1)
         self.assertEqual(decisions[0]["stage"], "prefilter")
         self.assertEqual(decisions[0]["reason"], "Rejected obvious pharmacy role: farmaceut")
+
+    def test_decision_eval_stage_label_uses_display_names(self) -> None:
+        self.assertEqual(decision_eval_stage_label({"stage": "prefilter"}), "Eval 1: Keywords")
+        self.assertEqual(decision_eval_stage_label({"stage": "triage"}), "Eval 2: LLM triage")
+        self.assertEqual(decision_eval_stage_label({"stage": "confirmation"}), "Eval 3: LLM confirmation")
 
     def test_openai_decision_keeps_reason_and_raw_response(self) -> None:
         def fake_post(url, payload, headers):
@@ -674,8 +680,8 @@ class MockMatcherTests(unittest.TestCase):
         )
 
         self.assertIn("Search evaluation audit", table)
-        self.assertIn("| developer    | 2     | 10        | 7                 | 2                | 1                    | 1    | no        |", table)
-        self.assertIn("| life science | 1     | 3         | 1                 | 1                | 1                    | 1    | yes       |", table)
+        self.assertIn("| developer    | 2     | 10        | 7                 | 2                | 1                  | 1                        | no        |", table)
+        self.assertIn("| life science | 1     | 3         | 1                 | 1                | 1                  | 1                        | yes       |", table)
 
     def test_llm_search_stats_file_is_append_only(self) -> None:
         jobs = [{"job_id": "1", "source_searches": ["developer"]}]
