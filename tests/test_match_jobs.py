@@ -132,7 +132,12 @@ class MockMatcherTests(unittest.TestCase):
     def test_openai_unicorn_triage_prompt_batches_jobs_with_profile_once(self) -> None:
         prompt = openai_unicorn_triage_prompt(
             [
-                {"job_id": "1", "title": "Principal Safety Engineer", "description": "Build regulated devices."},
+                {
+                    "job_id": "1",
+                    "title": "Principal Safety Engineer",
+                    "description": "Full ad text should stay out of triage.",
+                    "requirements_text": "Build regulated devices.",
+                },
                 {"job_id": "2", "title": "Frontend Engineer", "description": "Maintain web UI."},
             ],
             "Candidate has regulated product leadership experience.",
@@ -142,6 +147,9 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(prompt.count("Candidate has regulated product leadership experience."), 1)
         self.assertIn('"candidate_id": "1"', prompt)
         self.assertIn('"candidate_id": "2"', prompt)
+        self.assertIn('"requirements": "Build regulated devices."', prompt)
+        self.assertNotIn("Full ad text should stay out of triage.", prompt)
+        self.assertIn('"requirements": "Maintain web UI."', prompt)
         self.assertIn("temporary candidate list", prompt)
 
     def test_openai_prompt_uses_job_title_only(self) -> None:
@@ -680,8 +688,10 @@ class MockMatcherTests(unittest.TestCase):
         )
 
         self.assertIn("Search evaluation audit", table)
-        self.assertIn("| developer    | 2     | 10        | 7                 | 2                | 1                  | 1                        | no        |", table)
-        self.assertIn("| life science | 1     | 3         | 1                 | 1                | 1                  | 1                        | yes       |", table)
+        self.assertNotIn("Pages", table)
+        self.assertNotIn("Looked at", table)
+        self.assertIn("| developer    | 7                 | 2                | 1                  | 1                        | no        |", table)
+        self.assertIn("| life science | 1                 | 1                | 1                  | 1                        | yes       |", table)
 
     def test_llm_search_stats_file_is_append_only(self) -> None:
         jobs = [{"job_id": "1", "source_searches": ["developer"]}]

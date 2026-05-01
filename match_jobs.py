@@ -208,12 +208,13 @@ def job_candidate_id(job: dict[str, Any], index: int) -> str:
 
 
 def compact_job_ad(job: dict[str, Any], candidate_id: str) -> dict[str, str]:
+    triage_description = job.get("requirements_text") or job.get("description", "")
     fields = {
         "candidate_id": candidate_id,
         "title": job.get("title", ""),
         "company": job.get("company", ""),
         "location": job.get("location", ""),
-        "description": job.get("description", ""),
+        "requirements": triage_description,
     }
     return {key: value for key, value in fields.items() if isinstance(value, str) and value.strip()}
 
@@ -255,7 +256,8 @@ def openai_unicorn_triage_prompt(jobs: list[dict[str, Any]], profile: str) -> st
     ]
     return (
         "You are doing first-stage triage for a strict job-match workflow. Read the candidate profile once, "
-        "then scan all job ads. Build a temporary candidate list containing only jobs that might plausibly be "
+        "then scan compact job ads. The requirements field is an extracted requirements/profile section when "
+        "one could be found, otherwise it is the full job description. Build a temporary candidate list containing only jobs that might plausibly be "
         "rare 'unicorn' matches after stricter review. Be selective: generic engineering jobs, ordinary keyword "
         "matches, and weak single-factor overlaps should not be candidates. This stage may include uncertain but "
         "promising ads, but it should still keep the list small.\n\n"
@@ -1069,8 +1071,6 @@ def format_search_evaluation_audit_table(
         rows.append(
             (
                 search,
-                str(audit.get("pages_requested") or 0),
-                str(audit.get("results_seen") or 0),
                 str(audit.get("already_in_memory") or 0),
                 str(counts.get("passed_prefilter", audit.get("passed_prefilter") or 0)),
                 str(counts.get("passed_first_layer", 0)),
@@ -1081,8 +1081,6 @@ def format_search_evaluation_audit_table(
 
     headers = (
         "Search",
-        "Pages",
-        "Looked at",
         "Already in memory",
         "Eval 1: Keywords",
         "Eval 2: LLM triage",

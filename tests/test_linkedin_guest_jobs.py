@@ -17,6 +17,8 @@ from linkedin_guest_jobs import (
     collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
     env_flag_enabled,
+    extract_requirements_text,
+    extract_requirements_text_from_fragment,
     fetch_job_details,
     format_search_audit_table,
     guest_search_url,
@@ -25,6 +27,7 @@ from linkedin_guest_jobs import (
     load_seen_job_ids,
     main,
     parse_cheat_job_ad,
+    parse_job_detail,
     prefilter_job,
     search_url_from_config,
     search_urls_from_config,
@@ -366,8 +369,10 @@ class SearchUrlTests(unittest.TestCase):
         )
 
         self.assertIn("Search audit", table)
-        self.assertIn("| developer    | 2     | 10        | 0                 | 0                |                    |                          | no        |", table)
-        self.assertIn("| life science | 1     | 0         | 0                 | 0                |                    |                          | yes       |", table)
+        self.assertNotIn("Pages", table)
+        self.assertNotIn("Looked at", table)
+        self.assertIn("| developer    | 0                 | 0                |                    |                          | no        |", table)
+        self.assertIn("| life science | 0                 | 0                |                    |                          | yes       |", table)
 
     def test_search_audit_counts_results_already_in_memory(self) -> None:
         def fake_fetch(_url: str) -> str:
@@ -575,7 +580,9 @@ class SearchUrlTests(unittest.TestCase):
         table = format_search_audit_table(audits, detailed_jobs)
 
         self.assertIn("Eval 1: Keywords", table)
-        self.assertIn("| geo-only | 1     | 3         | 1                 | 1", table)
+        self.assertNotIn("Pages", table)
+        self.assertNotIn("Looked at", table)
+        self.assertIn("| geo-only | 1                 | 1", table)
         self.assertIn("Geo coverage", table)
         self.assertIn("Geo-visible jobs              3", table)
         self.assertIn("Geo-only only                 1", table)
@@ -644,6 +651,75 @@ class SearchUrlTests(unittest.TestCase):
 
         self.assertEqual(job.title, "Backend Python Integration Developer")
         self.assertEqual(job.description, "Build Python integrations.")
+
+    def test_extract_requirements_text_from_structured_description(self) -> None:
+        fragment = """
+            <p><strong>Responsibilities</strong></p>
+            <ul><li>Build products.</li></ul>
+            <p><strong>Qualifications</strong></p>
+            <ul>
+                <li>5+ years of Python experience.</li>
+                <li>Experience with regulated systems.</li>
+            </ul>
+            <p><strong>We Offer You</strong></p>
+            <p>Benefits and culture.</p>
+        """
+
+        requirements = extract_requirements_text_from_fragment(fragment)
+
+        self.assertIn("Qualifications", requirements)
+        self.assertIn("5+ years of Python experience.", requirements)
+        self.assertIn("Experience with regulated systems.", requirements)
+        self.assertNotIn("Benefits and culture.", requirements)
+
+    def test_extract_requirements_text_supports_swedish_headings(self) -> None:
+        fragment = """
+            <p><strong>Arbetsuppgifter</strong></p>
+            <p>Bygga system.</p>
+            <p><strong>Kvalifikationer</strong></p>
+            <p>Vi söker dig som har erfarenhet av Python och integrationer.</p>
+            <p><strong>Övrigt</strong></p>
+            <p>Välkommen med din ansökan.</p>
+        """
+
+        requirements = extract_requirements_text_from_fragment(fragment)
+
+        self.assertIn("Kvalifikationer", requirements)
+        self.assertIn("erfarenhet av Python", requirements)
+        self.assertNotIn("Välkommen med din ansökan.", requirements)
+
+    def test_parse_job_detail_stores_requirements_text_with_full_description_fallback(self) -> None:
+        html = """
+            <html>
+                <h2 class="top-card-layout__title">Backend Developer</h2>
+                <div class="show-more-less-html__markup">
+                    <p><strong>Qualifications</strong></p>
+                    <ul><li>Python experience.</li></ul>
+                    <p><strong>Apply Now</strong></p>
+                    <p>Application details.</p>
+                </div>
+            </html>
+        """
+
+        job = parse_job_detail(html, JobCard("1"))
+
+        self.assertEqual(job.requirements_extraction_method, "pattern")
+        self.assertIn("Python experience.", job.requirements_text)
+        self.assertNotIn("Application details.", job.requirements_text)
+
+        fallback = parse_job_detail(
+            """
+            <html>
+                <div class="show-more-less-html__markup">
+                    <p>Plain description without section headings.</p>
+                </div>
+            </html>
+            """,
+            JobCard("2"),
+        )
+
+        self.assertEqual(fallback.requirements_extraction_method, "full_description")
+        self.assertEqual(fallback.requirements_text, fallback.description)
 
     def test_fetch_job_details_skips_throttled_details(self) -> None:
         cards = [JobCard("throttled"), JobCard("ok")]

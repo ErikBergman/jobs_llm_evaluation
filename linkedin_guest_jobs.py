@@ -156,10 +156,18 @@ class JobCard:
 @dataclass
 class JobDetail(JobCard):
     description: str = ""
+    requirements_text: str = ""
+    requirements_extraction_method: str = ""
     prefilter_pass: bool = True
     prefilter_reason: str = ""
     prefilter_positive_matches: list[str] = field(default_factory=list)
     prefilter_negative_matches: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DescriptionSegment:
+    text: str
+    tags: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -503,6 +511,50 @@ class TextParser(HTMLParser):
 
     def text(self) -> str:
         return clean_text("".join(self.chunks))
+
+
+class DescriptionSegmentParser(HTMLParser):
+    boundary_tags = {"br", "div", "h1", "h2", "h3", "h4", "h5", "li", "ol", "p", "ul"}
+    heading_tags = {"b", "h1", "h2", "h3", "h4", "h5", "strong"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.segments: list[DescriptionSegment] = []
+        self._chunks: list[str] = []
+        self._tags: set[str] = set()
+        self._stack: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs_list: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag in self.boundary_tags:
+            self._flush()
+        if tag != "br":
+            self._stack.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in self.boundary_tags:
+            self._flush()
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index] == tag:
+                del self._stack[index]
+                break
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self._chunks.append(data)
+            self._tags.update(self._stack)
+
+    def _flush(self) -> None:
+        text = clean_text(" ".join(self._chunks))
+        if text:
+            self.segments.append(DescriptionSegment(text=text, tags=set(self._tags)))
+        self._chunks = []
+        self._tags = set()
+
+    def finish(self) -> list[DescriptionSegment]:
+        self._flush()
+        return self.segments
 
 
 def strip_json_comments(text: str) -> str:
@@ -954,8 +1006,6 @@ def format_search_audit_table(
     rows = [
         (
             audit.search,
-            str(audit.pages_requested),
-            str(audit.results_seen),
             str(audit.already_in_memory),
             str(audit.passed_prefilter),
             "",
@@ -966,8 +1016,6 @@ def format_search_audit_table(
     ]
     headers = (
         "Search",
-        "Pages",
-        "Looked at",
         "Already in memory",
         "Eval 1: Keywords",
         "Eval 2: LLM triage",
@@ -1005,7 +1053,63 @@ def write_search_audit(output_path: Path, audits: Iterable[SearchAudit]) -> Path
     return audit_path
 
 
-def extract_description(html: str) -> str:
+REQUIREMENTS_HEADING_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"^qualifications?$",
+        r"^kvalifikationer$",
+        r"^kravprofil$",
+        r"^krav för anställningen",
+        r"^requirements?$",
+        r"^required qualifications?$",
+        r"^qualifications\s*/\s*requirements$",
+        r"^the essential requirements",
+        r"^we believe you have$",
+        r"^who are you\??$",
+        r"^who you are$",
+        r"^who are we looking for\??$",
+        r"^vi söker dig$",
+        r"^vi söker dig som:?$",
+        r"^your profile$",
+        r"^din profil$",
+        r"^key experience",
+        r"^key experience and competencies:?$",
+        r"^what you bring",
+        r"^skills (and|&) experience$",
+        r"^must have$",
+        r"^need to have$",
+        r"^experience in the following",
+        r"^om dig$",
+        r"^vem är du\??$",
+        r"^nice to have$",
+        r"^meriterande",
+        r"^preferred qualifications?$",
+    )
+)
+REQUIREMENTS_STOP_HEADING_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"^we offer",
+        r"^what we offer",
+        r"^we offer you",
+        r"^apply now",
+        r"^application",
+        r"^ansökan",
+        r"^övrigt$",
+        r"^about ",
+        r"^om oss$",
+        r"^candidate data privacy",
+        r"^equal opportunity",
+        r"^travel, motor vehicle",
+        r"^for more information",
+        r"^contact",
+        r"^ready to act",
+        r"^läs mer",
+    )
+)
+
+
+def extract_description_fragment(html: str) -> str:
     class_match = re.search(r'<div\b[^>]*class="[^"]*\bshow-more-less-html__markup\b[^"]*"[^>]*>', html)
     if not class_match:
         return ""
@@ -1025,23 +1129,83 @@ def extract_description(html: str) -> str:
             depth += 1
 
         if depth == 0:
-            fragment = html[content_start : content_start + tag_match.start()]
-            parser = TextParser()
-            parser.feed(fragment)
-            return parser.text()
+            return html[content_start : content_start + tag_match.start()]
     return ""
+
+
+def extract_description(html: str) -> str:
+    fragment = extract_description_fragment(html)
+    if not fragment:
+        return ""
+    parser = TextParser()
+    parser.feed(fragment)
+    return parser.text()
+
+
+def parse_description_segments(fragment: str) -> list[DescriptionSegment]:
+    parser = DescriptionSegmentParser()
+    parser.feed(fragment)
+    return parser.finish()
+
+
+def is_heading_like_segment(segment: DescriptionSegment) -> bool:
+    text = segment.text.strip(" :.-–—")
+    if not text or len(text) > 90 or len(text.split()) > 10:
+        return False
+    if re.search(r"[.!]$", text):
+        return False
+    if DescriptionSegmentParser.heading_tags & segment.tags:
+        return True
+    return text.endswith(":") or text.isupper() or text.istitle()
+
+
+def matches_any_pattern(text: str, patterns: Iterable[re.Pattern[str]]) -> bool:
+    normalized = text.strip(" :.-–—")
+    return any(pattern.search(normalized) for pattern in patterns)
+
+
+def is_requirements_heading(segment: DescriptionSegment) -> bool:
+    return is_heading_like_segment(segment) and matches_any_pattern(segment.text, REQUIREMENTS_HEADING_PATTERNS)
+
+
+def is_requirements_stop_heading(segment: DescriptionSegment) -> bool:
+    return is_heading_like_segment(segment) and matches_any_pattern(segment.text, REQUIREMENTS_STOP_HEADING_PATTERNS)
+
+
+def extract_requirements_text_from_fragment(fragment: str) -> str:
+    segments = parse_description_segments(fragment)
+    start_index = next((index for index, segment in enumerate(segments) if is_requirements_heading(segment)), None)
+    if start_index is None:
+        return ""
+
+    selected: list[DescriptionSegment] = [segments[start_index]]
+    for segment in segments[start_index + 1:]:
+        if is_requirements_stop_heading(segment):
+            break
+        selected.append(segment)
+
+    return "\n".join(segment.text for segment in selected).strip()
+
+
+def extract_requirements_text(html: str) -> str:
+    fragment = extract_description_fragment(html)
+    return extract_requirements_text_from_fragment(fragment) if fragment else ""
 
 
 def parse_job_detail(html: str, card: JobCard) -> JobDetail:
     parser = JobDetailParser()
     parser.feed(html)
+    description = extract_description(html)
+    requirements_text = extract_requirements_text(html)
     payload = asdict(card)
     payload.update(
         {
             "title": parser.fields.get("title", card.title),
             "company": parser.fields.get("company", card.company),
             "posted": parser.fields.get("posted", card.posted),
-            "description": extract_description(html),
+            "description": description,
+            "requirements_text": requirements_text or description,
+            "requirements_extraction_method": "pattern" if requirements_text else "full_description",
         }
     )
     return JobDetail(**payload)
