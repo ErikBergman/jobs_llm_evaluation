@@ -688,6 +688,70 @@ class SearchUrlTests(unittest.TestCase):
         self.assertIn("erfarenhet av Python", requirements)
         self.assertNotIn("Välkommen med din ansökan.", requirements)
 
+    def test_extract_requirements_text_has_english_and_swedish_heading_equivalents(self) -> None:
+        heading_pairs = [
+            ("Required qualifications", "Obligatoriska kvalifikationer"),
+            ("Requirements for the position", "Krav för anställningen"),
+            ("We believe you have", "Vi tror att du har"),
+            ("Who are we looking for?", "Vem söker vi?"),
+            ("About you", "Om dig"),
+            ("Key Experience and Competencies", "Erfarenheter och kompetenser"),
+            ("What you bring", "Vad du bidrar med"),
+            ("Skills and experience", "Kompetens och erfarenhet"),
+            ("Must have", "Skallkrav"),
+            ("Experience in the following", "Erfarenhet inom följande"),
+            ("Nice to have", "Meriterande"),
+            ("Preferred qualifications", "Önskade kvalifikationer"),
+        ]
+
+        for english_heading, swedish_heading in heading_pairs:
+            for heading in (english_heading, swedish_heading):
+                with self.subTest(heading=heading):
+                    fragment = f"""
+                        <p><strong>{heading}</strong></p>
+                        <ul><li>Python and integration experience.</li></ul>
+                        <p><strong>We Offer You</strong></p>
+                        <p>Benefits.</p>
+                    """
+
+                    requirements = extract_requirements_text_from_fragment(fragment)
+
+                    self.assertIn(heading, requirements)
+                    self.assertIn("Python and integration experience.", requirements)
+                    self.assertNotIn("Benefits.", requirements)
+
+    def test_extract_requirements_text_has_english_and_swedish_stop_equivalents(self) -> None:
+        stop_pairs = [
+            ("We Offer You", "Vi erbjuder dig"),
+            ("What We Offer", "Vad vi erbjuder"),
+            ("Apply Now", "Ansök nu"),
+            ("Application", "Ansökan"),
+            ("Additional Information", "Övrigt"),
+            ("About us", "Om oss"),
+            ("Candidate Data Privacy", "Personuppgifter"),
+            ("Equal Opportunity", "Lika möjligheter"),
+            ("For more information", "För mer information"),
+            ("Contact", "Kontakt"),
+            ("Ready to Act", "Redo att söka"),
+            ("Read more", "Läs mer"),
+        ]
+
+        for english_stop, swedish_stop in stop_pairs:
+            for stop_heading in (english_stop, swedish_stop):
+                with self.subTest(stop_heading=stop_heading):
+                    fragment = f"""
+                        <p><strong>Qualifications</strong></p>
+                        <ul><li>Python and integration experience.</li></ul>
+                        <p><strong>{stop_heading}</strong></p>
+                        <p>This should be excluded.</p>
+                    """
+
+                    requirements = extract_requirements_text_from_fragment(fragment)
+
+                    self.assertIn("Python and integration experience.", requirements)
+                    self.assertNotIn(stop_heading, requirements)
+                    self.assertNotIn("This should be excluded.", requirements)
+
     def test_parse_job_detail_stores_requirements_text_with_full_description_fallback(self) -> None:
         html = """
             <html>
