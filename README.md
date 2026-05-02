@@ -41,9 +41,13 @@ OpenAI mode asks the model whether the job is a rare "unicorn" match for the can
 The evaluation flow uses three user-facing stages:
 
 1. Eval 1: Keywords removes obvious non-matches with a permissive local keyword screen.
-2. Eval 2: LLM triage reads the profile once and scans all Eval 1-passing ads.
+2. Eval 2: LLM triage reads the profile once and scans compact requirement/profile sections from Eval 1-passing ads.
 3. Eval 3: LLM confirmation performs a second, stateless review of jobs selected by triage.
 4. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
+
+Eval 2 does not normally read the full job ad. At scrape time, the LinkedIn guest detail HTML is parsed for requirement/profile sections using heading patterns in English and Swedish, such as `Qualifications`, `Kvalifikationer`, `We believe you have`, `Vi tror att du har`, `Who are we looking for?`, `Vem söker vi?`, `Basic qualifications`, `Grundläggande kvalifikationer`, `Nice to have`, and `Meriterande`. Extraction stops at offer/application/about/legal/contact headings such as `We Offer You`, `Vi erbjuder dig`, `Apply Now`, `Ansökan`, `About us`, and `Om oss`.
+
+If no requirement/profile pattern is found, the scraper stores the full description as the Eval 2 text, so the matcher keeps its previous behavior for unusual ads. A 30-ad live Lund scrape with a one-week recency window found requirement/profile sections in 24 ads and fell back to full descriptions in 6 ads, an 80.0% extraction hit rate with an estimated 55.5% Eval 2 word-count reduction.
 
 Local usage:
 

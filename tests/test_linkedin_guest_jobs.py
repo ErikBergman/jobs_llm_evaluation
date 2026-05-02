@@ -691,16 +691,25 @@ class SearchUrlTests(unittest.TestCase):
     def test_extract_requirements_text_has_english_and_swedish_heading_equivalents(self) -> None:
         heading_pairs = [
             ("Required qualifications", "Obligatoriska kvalifikationer"),
+            ("Basic qualifications", "Grundläggande kvalifikationer"),
             ("Requirements for the position", "Krav för anställningen"),
+            ("Qualifications/merits", "Kvalifikationer/meriterande"),
             ("We believe you have", "Vi tror att du har"),
+            ("To succeed in the role you have", "För att lyckas i rollen har du"),
             ("Who are we looking for?", "Vem söker vi?"),
+            ("Who are we looking for/Who are you?", "Vem söker vi/Vem är du?"),
             ("About you", "Om dig"),
+            ("As a person you are", "Som person är du"),
             ("Key Experience and Competencies", "Erfarenheter och kompetenser"),
             ("What you bring", "Vad du bidrar med"),
             ("Skills and experience", "Kompetens och erfarenhet"),
             ("Must have", "Skallkrav"),
             ("Experience in the following", "Erfarenhet inom följande"),
             ("Nice to have", "Meriterande"),
+            ("Also meritorious", "Meriterande är också"),
+            ("It is meritorious to have", "Det är meriterande med"),
+            ("Below are seen as merits", "Följande ses som meriterande"),
+            ("Meritorious skills, qualities and experiences", "Meriterande färdigheter, egenskaper och erfarenheter"),
             ("Preferred qualifications", "Önskade kvalifikationer"),
         ]
 

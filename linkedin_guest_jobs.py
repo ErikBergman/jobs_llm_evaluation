@@ -1061,8 +1061,12 @@ REQUIREMENTS_HEADING_PATTERNS = tuple(
         r"^kvalifikationer$",
         r"^required qualifications?$",
         r"^obligatoriska kvalifikationer$",
+        r"^basic qualifications?$",
+        r"^grundläggande kvalifikationer$",
         r"^qualifications\s*/\s*requirements$",
         r"^kvalifikationer\s*/\s*krav$",
+        r"^qualifications\s*/\s*merits?$",
+        r"^kvalifikationer\s*/\s*meriterande$",
         r"^requirements?$",
         r"^krav$",
         r"^the essential requirements",
@@ -1077,12 +1081,16 @@ REQUIREMENTS_HEADING_PATTERNS = tuple(
         # Believed profile / about the candidate.
         r"^we believe you have$",
         r"^vi tror att du har$",
+        r"^to succeed in (this|the) role you have:?$",
+        r"^för att lyckas i rollen har du:?$",
         r"^who are you\??$",
         r"^vem är du\??$",
         r"^who you are$",
         r"^vem du är$",
         r"^who are we looking for\??$",
         r"^vem söker vi\??$",
+        r"^who are we looking for\s*/\s*who are you\??$",
+        r"^vem söker vi\s*/\s*vem är du\??$",
         r"^vi söker dig$",
         r"^we are looking for you$",
         r"^vi söker dig som:?$",
@@ -1091,6 +1099,8 @@ REQUIREMENTS_HEADING_PATTERNS = tuple(
         r"^din profil$",
         r"^about you$",
         r"^om dig$",
+        r"^as a person you are$",
+        r"^som person är du$",
         # Experience / competencies / contribution.
         r"^key experience",
         r"^nyckelerfarenhet",
@@ -1115,6 +1125,16 @@ REQUIREMENTS_HEADING_PATTERNS = tuple(
         r"^nice to have$",
         r"^meriterande",
         r"^det är meriterande",
+        r"^also meritorious:?$",
+        r"^meriterande är också:?$",
+        r"^it is meritorious to have:?$",
+        r"^det är meri?terande med:?$",
+        r"^det är mertierande med:?$",
+        r"^below are seen as merits$",
+        r"^nedan ses som meriterande$",
+        r"^följande ses som meriterande$",
+        r"^meritorious skills,? qualities and experiences$",
+        r"^meriterande färdigheter,? egenskaper och erfarenheter$",
         r"^önskvärt",
         r"^plus om",
         r"^preferred qualifications?$",
@@ -1209,14 +1229,15 @@ def parse_description_segments(fragment: str) -> list[DescriptionSegment]:
 
 
 def is_heading_like_segment(segment: DescriptionSegment) -> bool:
-    text = segment.text.strip(" :.-–—")
+    raw_text = segment.text.strip()
+    text = raw_text.strip(" :.-–—")
     if not text or len(text) > 90 or len(text.split()) > 10:
         return False
     if re.search(r"[.!]$", text):
         return False
     if DescriptionSegmentParser.heading_tags & segment.tags:
         return True
-    return text.endswith(":") or text.isupper() or text.istitle()
+    return raw_text.endswith(":") or text.isupper() or text.istitle()
 
 
 def matches_any_pattern(text: str, patterns: Iterable[re.Pattern[str]]) -> bool:
@@ -1225,11 +1246,17 @@ def matches_any_pattern(text: str, patterns: Iterable[re.Pattern[str]]) -> bool:
 
 
 def is_requirements_heading(segment: DescriptionSegment) -> bool:
-    return is_heading_like_segment(segment) and matches_any_pattern(segment.text, REQUIREMENTS_HEADING_PATTERNS)
+    text = segment.text.strip(" :.-–—")
+    if matches_any_pattern(segment.text, REQUIREMENTS_HEADING_PATTERNS):
+        return bool(text) and len(text) <= 120 and len(text.split()) <= 12 and not re.search(r"[.!]$", text)
+    return False
 
 
 def is_requirements_stop_heading(segment: DescriptionSegment) -> bool:
-    return is_heading_like_segment(segment) and matches_any_pattern(segment.text, REQUIREMENTS_STOP_HEADING_PATTERNS)
+    text = segment.text.strip(" :.-–—")
+    if matches_any_pattern(segment.text, REQUIREMENTS_STOP_HEADING_PATTERNS):
+        return bool(text) and len(text) <= 120 and len(text.split()) <= 12 and not re.search(r"[.!]$", text)
+    return False
 
 
 def extract_requirements_text_from_fragment(fragment: str) -> str:
