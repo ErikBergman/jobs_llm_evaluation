@@ -1,0 +1,20 @@
+{
+  "name": "english_list_requirements",
+  "coverage": ["english", "list_requirements", "stop_heading"],
+  "job_card": {
+    "job_id": "corpus-english-list",
+    "title": "Backend Platform Engineer",
+    "company": "Example Platform AB",
+    "location": "Malmo, Sweden",
+    "source_searches": ["geo-only"]
+  },
+  "detail_html": "<html><body><h2 class=\"top-card-layout__title\">Backend Platform Engineer</h2><a class=\"topcard__org-name-link\">Example Platform AB</a><div class=\"show-more-less-html__markup\"><p><strong>About the role</strong></p><p>You will build services used by internal teams.</p><p><strong>Basic qualifications</strong></p><ul><li>Experience building Python backend services.</li><li>Comfortable with APIs, tests, and production support.</li></ul><p><strong>Application</strong></p><p>Send your application through our career site.</p></div></body></html>",
+  "expected": {
+    "requirements_text": "Basic qualifications\nExperience building Python backend services.\nComfortable with APIs, tests, and production support.",
+    "requirements_extraction_method": "pattern",
+    "prefilter_pass": true,
+    "prefilter_positive_matches": ["engineer", "backend", "platform", "python"],
+    "prefilter_negative_matches": [],
+    "mock_hit": false
+  }
+}

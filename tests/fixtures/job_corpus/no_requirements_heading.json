@@ -1,0 +1,20 @@
+{
+  "name": "no_requirements_heading",
+  "coverage": ["fallback_full_description"],
+  "job_card": {
+    "job_id": "corpus-fallback",
+    "title": "Research Data Coordinator",
+    "company": "Example Research Institute",
+    "location": "Lund, Sweden",
+    "source_searches": ["geo-only"]
+  },
+  "detail_html": "<html><body><h2 class=\"top-card-layout__title\">Research Data Coordinator</h2><a class=\"topcard__org-name-link\">Example Research Institute</a><div class=\"show-more-less-html__markup\"><p>Join a research team that improves data quality for laboratory studies.</p><p>The work includes documentation, sample metadata, QA checks, and collaboration with scientists.</p><p>This ad intentionally has no recognized requirements heading.</p></div></body></html>",
+  "expected": {
+    "requirements_text": "Join a research team that improves data quality for laboratory studies. The work includes documentation, sample metadata, QA checks, and collaboration with scientists. This ad intentionally has no recognized requirements heading.",
+    "requirements_extraction_method": "full_description",
+    "prefilter_pass": true,
+    "prefilter_positive_matches": ["data", "research", "laboratory", "QA"],
+    "prefilter_negative_matches": [],
+    "mock_hit": false
+  }
+}

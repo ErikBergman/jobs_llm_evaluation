@@ -79,6 +79,25 @@ When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. T
 
 Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
 
+## Offline corpus tests
+
+The test suite includes a small anonymized offline corpus under `tests/fixtures/job_corpus/`.
+These fixtures do not change production behavior and are not used by scheduled runs.
+They let parser, prefilter, and deterministic mock-route behavior be checked without
+calling LinkedIn or OpenAI.
+
+Run the corpus test directly with:
+
+```bash
+python3 -m unittest tests.test_job_corpus
+```
+
+Run the full local suite with:
+
+```bash
+python3 test_all.py
+```
+
 ## GitHub Actions scheduling
 
 Scheduling is split across two workflows:

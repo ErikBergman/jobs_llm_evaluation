@@ -1,0 +1,20 @@
+{
+  "name": "swedish_paragraph_requirements",
+  "coverage": ["swedish", "paragraph_requirements", "stop_heading"],
+  "job_card": {
+    "job_id": "corpus-swedish-paragraph",
+    "title": "Systemutvecklare med integrationsfokus",
+    "company": "Exempel Teknik AB",
+    "location": "Lund, Sverige",
+    "source_searches": ["geo-only"]
+  },
+  "detail_html": "<html><body><h2 class=\"top-card-layout__title\">Systemutvecklare med integrationsfokus</h2><a class=\"topcard__org-name-link\">Exempel Teknik AB</a><div class=\"show-more-less-html__markup\"><p><strong>Arbetsuppgifter</strong></p><p>Du bygger och förvaltar interna system.</p><p><strong>Kvalifikationer</strong></p><p>Vi söker dig som har erfarenhet av Python, automatisering och integrationer. Du kan förklara tekniska val för både utvecklare och verksamhet.</p><p><strong>Övrigt</strong></p><p>Välkommen med din ansökan senast fredag.</p></div></body></html>",
+  "expected": {
+    "requirements_text": "Kvalifikationer\nVi söker dig som har erfarenhet av Python, automatisering och integrationer. Du kan förklara tekniska val för både utvecklare och verksamhet.",
+    "requirements_extraction_method": "pattern",
+    "prefilter_pass": true,
+    "prefilter_positive_matches": ["python", "system", "utvecklare", "automatisering"],
+    "prefilter_negative_matches": [],
+    "mock_hit": false
+  }
+}

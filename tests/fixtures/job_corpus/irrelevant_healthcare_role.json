@@ -1,0 +1,20 @@
+{
+  "name": "irrelevant_healthcare_role",
+  "coverage": ["negative_prefilter"],
+  "job_card": {
+    "job_id": "corpus-negative-healthcare",
+    "title": "Sjuksköterska till vårdavdelning",
+    "company": "Exempel Vård AB",
+    "location": "Lund, Sverige",
+    "source_searches": ["geo-only"]
+  },
+  "detail_html": "<html><body><h2 class=\"top-card-layout__title\">Sjuksköterska till vårdavdelning</h2><a class=\"topcard__org-name-link\">Exempel Vård AB</a><div class=\"show-more-less-html__markup\"><p><strong>Kvalifikationer</strong></p><p>Du är legitimerad sjuksköterska och tycker om patientnära arbete.</p><p><strong>Ansökan</strong></p><p>Skicka in din ansökan via formuläret.</p></div></body></html>",
+  "expected": {
+    "requirements_text": "Kvalifikationer\nDu är legitimerad sjuksköterska och tycker om patientnära arbete.",
+    "requirements_extraction_method": "pattern",
+    "prefilter_pass": false,
+    "prefilter_positive_matches": [],
+    "prefilter_negative_matches": ["sjuksköterska"],
+    "mock_hit": false
+  }
+}
