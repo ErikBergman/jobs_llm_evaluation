@@ -149,6 +149,10 @@ jobs:
         shell: bash
         run: |
           set +e
+          matching_config_args=()
+          if [[ -f "${RUNTIME_RESULTS_DIR}/job_matching.json" ]]; then
+            matching_config_args+=(--matching-config "${RUNTIME_RESULTS_DIR}/job_matching.json")
+          fi
           python3 linkedin_guest_jobs.py \
             --results-root "${RUNTIME_RESULTS_DIR}" \
             --results-bucket waiting_room \
@@ -157,6 +161,7 @@ jobs:
             --max-pages "${JOB_SEARCH_MAX_PAGES}" \
             --page-size "${JOB_SEARCH_PAGE_SIZE}" \
             --request-delay "${JOB_SEARCH_REQUEST_DELAY}" \
+            "${matching_config_args[@]}" \
             --output linkedin_jobs_sample.json 2>&1 | tee scrape.log
           scrape_status="${PIPESTATUS[0]}"
           set -e

@@ -164,6 +164,7 @@ results/
 runtime_results/
 job_profile.txt
 job_profile.rtf
+job_matching.json
 
 # Pyre type checker
 .pyre/

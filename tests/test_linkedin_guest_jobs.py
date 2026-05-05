@@ -16,6 +16,7 @@ from linkedin_guest_jobs import (
     SearchAudit,
     collect_unseen_cards_from_search_urls,
     collect_unseen_cards,
+    default_matching_config,
     env_flag_enabled,
     extract_requirements_text,
     extract_requirements_text_from_fragment,
@@ -23,6 +24,7 @@ from linkedin_guest_jobs import (
     format_search_audit_table,
     guest_search_url,
     load_cheat_job_ad,
+    load_matching_config,
     load_search_config,
     load_seen_job_ids,
     main,
@@ -160,6 +162,47 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(config["keywords"], "engineer // this remains text")
         self.assertEqual(config["geo_id"], "105734258")
         self.assertEqual(config["date_posted"], "r86400")
+
+    def test_matching_config_defaults_preserve_prefilter_behavior(self) -> None:
+        config = default_matching_config()
+
+        decision = prefilter_job(
+            {
+                "title": "Backend Python Developer",
+                "description": "Build integrations.",
+            },
+            config=config.prefilter,
+        )
+
+        self.assertTrue(decision["prefilter_pass"])
+        self.assertEqual(decision["prefilter_positive_matches"], ["developer", "backend", "python"])
+
+    def test_load_matching_config_reads_jsonc_prefilter_overrides(self) -> None:
+        content = """
+        {
+          "prefilter": {
+            // Replace positive keywords for this profile.
+            "positive_keywords": ["rust"],
+            "negative_keywords": ["manager"],
+            "negative_categories": {
+              "manager": "management"
+            },
+          },
+        }
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "job_matching.jsonc"
+            config_path.write_text(content, encoding="utf-8")
+
+            config = load_matching_config(config_path)
+
+        relevant = prefilter_job({"title": "Rust Developer"}, config=config.prefilter)
+        irrelevant = prefilter_job({"title": "Engineering Manager"}, config=config.prefilter)
+
+        self.assertTrue(relevant["prefilter_pass"])
+        self.assertEqual(relevant["prefilter_positive_matches"], ["rust"])
+        self.assertFalse(irrelevant["prefilter_pass"])
+        self.assertEqual(irrelevant["prefilter_reason"], "Rejected obvious management role: manager")
 
     def test_load_seen_job_ids_reads_nested_result_jsons(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -838,20 +881,21 @@ class SearchUrlTests(unittest.TestCase):
 
             with mock.patch("linkedin_guest_jobs.collect_unseen_cards_from_search_urls", return_value=[]):
                 with mock.patch.dict("os.environ", {"CHEAT_MODE": "true"}, clear=False):
-                    with mock.patch("sys.stdout", new_callable=io.StringIO):
-                        with mock.patch(
-                            "sys.argv",
-                            [
-                                "linkedin_guest_jobs.py",
-                                "--input",
-                                str(input_path),
-                                "--results-root",
-                                str(results_root),
-                                "--limit",
-                                "2",
-                            ],
-                        ):
-                            exit_code = main()
+                    with mock.patch("linkedin_guest_jobs.DEFAULT_MATCHING_CONFIG_PATH", root / "missing.json"):
+                        with mock.patch("sys.stdout", new_callable=io.StringIO):
+                            with mock.patch(
+                                "sys.argv",
+                                [
+                                    "linkedin_guest_jobs.py",
+                                    "--input",
+                                    str(input_path),
+                                    "--results-root",
+                                    str(results_root),
+                                    "--limit",
+                                    "2",
+                                ],
+                            ):
+                                exit_code = main()
 
             output_files = list(results_root.glob("discard/*/linkedin_jobs_sample.json"))
             payload = json.loads(output_files[0].read_text(encoding="utf-8"))
@@ -860,6 +904,58 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(len(output_files), 1)
         self.assertEqual(payload[0]["job_id"], CHEAT_JOB_ID)
         self.assertEqual(payload[0]["title"], "Backend Python Integration Developer")
+
+    def test_main_applies_matching_config_prefilter_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_path = root / "input.json"
+            matching_config_path = root / "job_matching.jsonc"
+            results_root = root / "results"
+            input_path.write_text(json.dumps({"keywords": "engineer"}), encoding="utf-8")
+            matching_config_path.write_text(
+                """
+                {
+                  "prefilter": {
+                    "positive_keywords": ["rust"],
+                    "negative_keywords": ["manager"],
+                    "negative_categories": {"manager": "management"},
+                  },
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            with mock.patch(
+                "linkedin_guest_jobs.collect_unseen_cards_from_search_urls",
+                return_value=[JobCard("custom")],
+            ):
+                with mock.patch(
+                    "linkedin_guest_jobs.fetch_job_details",
+                    return_value=[JobDetail("custom", title="Engineering Manager")],
+                ):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO):
+                        with mock.patch(
+                            "sys.argv",
+                            [
+                                "linkedin_guest_jobs.py",
+                                "--input",
+                                str(input_path),
+                                "--matching-config",
+                                str(matching_config_path),
+                                "--results-root",
+                                str(results_root),
+                                "--limit",
+                                "1",
+                            ],
+                        ):
+                            exit_code = main()
+
+            output_files = list(results_root.glob("discard/*/linkedin_jobs_sample.json"))
+            payload = json.loads(output_files[0].read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload[0]["prefilter_pass"], False)
+        self.assertEqual(payload[0]["prefilter_reason"], "Rejected obvious management role: manager")
 
 
 if __name__ == "__main__":

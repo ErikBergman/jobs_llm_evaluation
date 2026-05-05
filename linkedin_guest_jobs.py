@@ -29,6 +29,7 @@ DEFAULT_RESULTS_ROOT = Path("results")
 DEFAULT_RESULTS_BUCKET = "discard"
 WAITING_ROOM_BUCKET = "waiting_room"
 DEFAULT_OUTPUT_NAME = "linkedin_jobs_sample.json"
+DEFAULT_MATCHING_CONFIG_PATH = Path("job_matching.json")
 DEFAULT_MAX_SEARCH_PAGES = 2
 DEFAULT_GUEST_PAGE_SIZE = 10
 DEFAULT_REQUEST_DELAY_SECONDS = 0.0
@@ -63,7 +64,7 @@ SEARCH_FIELD_ALIASES = {
     "f_PP": ("f_PP", "place_ids"),
     "sortBy": ("sortBy", "sort_by"),
 }
-PREFILTER_POSITIVE_KEYWORDS = (
+DEFAULT_PREFILTER_POSITIVE_KEYWORDS = (
     "developer",
     "software",
     "engineer",
@@ -113,7 +114,7 @@ PREFILTER_POSITIVE_KEYWORDS = (
     "civilt försvar",
     "utveckling",
 )
-PREFILTER_NEGATIVE_KEYWORDS = (
+DEFAULT_PREFILTER_NEGATIVE_KEYWORDS = (
     "sjuksköterska",
     "lärare",
     "restaurang",
@@ -125,7 +126,7 @@ PREFILTER_NEGATIVE_KEYWORDS = (
     "farmaceut",
     "psykolog",
 )
-PREFILTER_NEGATIVE_CATEGORIES = {
+DEFAULT_PREFILTER_NEGATIVE_CATEGORIES = {
     "sjuksköterska": "healthcare",
     "farmaceut": "pharmacy",
     "psykolog": "healthcare",
@@ -137,6 +138,25 @@ PREFILTER_NEGATIVE_CATEGORIES = {
     "butik": "retail",
     "kundcenter": "customer service",
 }
+
+
+@dataclass(frozen=True)
+class PrefilterConfig:
+    positive_keywords: tuple[str, ...]
+    negative_keywords: tuple[str, ...]
+    negative_categories: dict[str, str]
+
+
+@dataclass(frozen=True)
+class MatchingConfig:
+    prefilter: PrefilterConfig
+
+
+DEFAULT_PREFILTER_CONFIG = PrefilterConfig(
+    positive_keywords=DEFAULT_PREFILTER_POSITIVE_KEYWORDS,
+    negative_keywords=DEFAULT_PREFILTER_NEGATIVE_KEYWORDS,
+    negative_categories=DEFAULT_PREFILTER_NEGATIVE_CATEGORIES,
+)
 
 
 @dataclass
@@ -189,13 +209,13 @@ def keyword_pattern(keyword: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![\wåäöÅÄÖ]){escaped}(?![\wåäöÅÄÖ])", re.IGNORECASE)
 
 
-PREFILTER_POSITIVE_PATTERNS = tuple(
+DEFAULT_PREFILTER_POSITIVE_PATTERNS = tuple(
     (keyword, keyword_pattern(keyword))
-    for keyword in dict.fromkeys(PREFILTER_POSITIVE_KEYWORDS)
+    for keyword in dict.fromkeys(DEFAULT_PREFILTER_POSITIVE_KEYWORDS)
 )
-PREFILTER_NEGATIVE_PATTERNS = tuple(
+DEFAULT_PREFILTER_NEGATIVE_PATTERNS = tuple(
     (keyword, keyword_pattern(keyword))
-    for keyword in dict.fromkeys(PREFILTER_NEGATIVE_KEYWORDS)
+    for keyword in dict.fromkeys(DEFAULT_PREFILTER_NEGATIVE_KEYWORDS)
 )
 
 
@@ -212,6 +232,22 @@ def unique_preserving_order(values: Iterable[str]) -> list[str]:
 
 def keyword_matches(text: str, patterns: Iterable[tuple[str, re.Pattern[str]]]) -> list[str]:
     return [keyword for keyword, pattern in patterns if pattern.search(text)]
+
+
+def keyword_patterns(keywords: Iterable[str]) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    return tuple((keyword, keyword_pattern(keyword)) for keyword in dict.fromkeys(keywords))
+
+
+def prefilter_positive_patterns(config: PrefilterConfig) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    if config == DEFAULT_PREFILTER_CONFIG:
+        return DEFAULT_PREFILTER_POSITIVE_PATTERNS
+    return keyword_patterns(config.positive_keywords)
+
+
+def prefilter_negative_patterns(config: PrefilterConfig) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    if config == DEFAULT_PREFILTER_CONFIG:
+        return DEFAULT_PREFILTER_NEGATIVE_PATTERNS
+    return keyword_patterns(config.negative_keywords)
 
 
 def prefilter_text_fields(job: dict[str, object]) -> list[tuple[str, str]]:
@@ -231,16 +267,22 @@ def prefilter_text_fields(job: dict[str, object]) -> list[tuple[str, str]]:
     ]
 
 
-def prefilter_job(job: dict[str, object]) -> dict[str, object]:
+def prefilter_job(
+    job: dict[str, object],
+    config: PrefilterConfig | None = None,
+) -> dict[str, object]:
+    config = config or DEFAULT_PREFILTER_CONFIG
+    positive_patterns = prefilter_positive_patterns(config)
+    negative_patterns = prefilter_negative_patterns(config)
     fields = prefilter_text_fields(job)
     positive_by_field: list[tuple[str, str]] = []
     negative_matches: list[str] = []
     for field_name, text in fields:
         if not text:
             continue
-        for keyword in keyword_matches(text, PREFILTER_POSITIVE_PATTERNS):
+        for keyword in keyword_matches(text, positive_patterns):
             positive_by_field.append((field_name, keyword))
-        negative_matches.extend(keyword_matches(text, PREFILTER_NEGATIVE_PATTERNS))
+        negative_matches.extend(keyword_matches(text, negative_patterns))
 
     positive_matches = unique_preserving_order(keyword for _, keyword in positive_by_field)
     negative_matches = unique_preserving_order(negative_matches)
@@ -250,7 +292,7 @@ def prefilter_job(job: dict[str, object]) -> dict[str, object]:
         passed = True
     elif negative_matches:
         keyword = negative_matches[0]
-        category = PREFILTER_NEGATIVE_CATEGORIES.get(keyword, "non-match")
+        category = config.negative_categories.get(keyword, "non-match")
         reason = f"Rejected obvious {category} role: {keyword}"
         passed = False
     else:
@@ -265,8 +307,8 @@ def prefilter_job(job: dict[str, object]) -> dict[str, object]:
     }
 
 
-def apply_prefilter_metadata(job: JobDetail) -> JobDetail:
-    metadata = prefilter_job(asdict(job))
+def apply_prefilter_metadata(job: JobDetail, config: PrefilterConfig | None = None) -> JobDetail:
+    metadata = prefilter_job(asdict(job), config=config)
     job.prefilter_pass = bool(metadata["prefilter_pass"])
     job.prefilter_reason = str(metadata["prefilter_reason"])
     job.prefilter_positive_matches = list(metadata["prefilter_positive_matches"])
@@ -274,8 +316,11 @@ def apply_prefilter_metadata(job: JobDetail) -> JobDetail:
     return job
 
 
-def apply_prefilter_metadata_to_jobs(jobs: Iterable[JobDetail]) -> list[JobDetail]:
-    return [apply_prefilter_metadata(job) for job in jobs]
+def apply_prefilter_metadata_to_jobs(
+    jobs: Iterable[JobDetail],
+    config: PrefilterConfig | None = None,
+) -> list[JobDetail]:
+    return [apply_prefilter_metadata(job, config=config) for job in jobs]
 
 
 def rtf_to_text(rtf: str) -> str:
@@ -632,6 +677,78 @@ def strip_json_trailing_commas(text: str) -> str:
             output.append(char)
             index += 1
     return "".join(output)
+
+
+def default_matching_config() -> MatchingConfig:
+    return MatchingConfig(
+        prefilter=PrefilterConfig(
+            positive_keywords=DEFAULT_PREFILTER_CONFIG.positive_keywords,
+            negative_keywords=DEFAULT_PREFILTER_CONFIG.negative_keywords,
+            negative_categories=dict(DEFAULT_PREFILTER_CONFIG.negative_categories),
+        )
+    )
+
+
+def string_list_from_config(value: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise ValueError(f"{field_name} must be a list of strings")
+    if not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{field_name} must be a list of strings")
+    keywords = tuple(item.strip() for item in value if item.strip())
+    if not keywords:
+        raise ValueError(f"{field_name} must contain at least one string")
+    return keywords
+
+
+def string_mapping_from_config(value: object, field_name: str) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be an object")
+    if not all(isinstance(key, str) and isinstance(category, str) for key, category in value.items()):
+        raise ValueError(f"{field_name} must map strings to strings")
+    return {
+        key.strip(): category.strip()
+        for key, category in value.items()
+        if key.strip() and category.strip()
+    }
+
+
+def matching_config_from_dict(data: dict[str, object]) -> MatchingConfig:
+    prefilter_data = data.get("prefilter", {})
+    if prefilter_data in (None, ""):
+        prefilter_data = {}
+    if not isinstance(prefilter_data, dict):
+        raise ValueError("prefilter must be an object")
+
+    positive_keywords = DEFAULT_PREFILTER_CONFIG.positive_keywords
+    negative_keywords = DEFAULT_PREFILTER_CONFIG.negative_keywords
+    negative_categories = dict(DEFAULT_PREFILTER_CONFIG.negative_categories)
+
+    if "positive_keywords" in prefilter_data:
+        positive_keywords = string_list_from_config(prefilter_data["positive_keywords"], "prefilter.positive_keywords")
+    if "negative_keywords" in prefilter_data:
+        negative_keywords = string_list_from_config(prefilter_data["negative_keywords"], "prefilter.negative_keywords")
+    if "negative_categories" in prefilter_data:
+        negative_categories.update(
+            string_mapping_from_config(prefilter_data["negative_categories"], "prefilter.negative_categories")
+        )
+
+    return MatchingConfig(
+        prefilter=PrefilterConfig(
+            positive_keywords=positive_keywords,
+            negative_keywords=negative_keywords,
+            negative_categories=negative_categories,
+        )
+    )
+
+
+def load_matching_config(config_path: Path | None) -> MatchingConfig:
+    if config_path is None:
+        return default_matching_config()
+    with open(config_path, encoding="utf-8") as config_file:
+        data = json.loads(strip_json_trailing_commas(strip_json_comments(config_file.read())))
+    if not isinstance(data, dict):
+        raise ValueError(f"{config_path} must contain a JSON object")
+    return matching_config_from_dict(data)
 
 
 def load_search_config(input_path: Path) -> dict[str, object]:
@@ -1391,6 +1508,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT_PATH, help="Search input JSON path")
     parser.add_argument(
+        "--matching-config",
+        type=Path,
+        default=None,
+        help="Optional job matching JSON/JSONC config path for prefilter keywords",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=int(os.environ.get("JOB_SEARCH_LIMIT", "2")),
@@ -1439,6 +1562,10 @@ def main() -> int:
 
     card_limit = args.card_limit if args.card_limit is not None else args.limit
     detail_limit = args.detail_limit if args.detail_limit is not None else card_limit
+    matching_config_path = args.matching_config
+    if matching_config_path is None and DEFAULT_MATCHING_CONFIG_PATH.exists():
+        matching_config_path = DEFAULT_MATCHING_CONFIG_PATH
+    matching_config = load_matching_config(matching_config_path)
     search_urls = search_urls_from_config(load_search_config(args.input))
     seen_job_ids = load_seen_job_ids(args.results_root)
     search_audits: list[SearchAudit] = []
@@ -1454,7 +1581,7 @@ def main() -> int:
     jobs = fetch_job_details(cards[: max(detail_limit, 0)], request_delay_seconds=args.request_delay)
     if env_flag_enabled("CHEAT_MODE"):
         jobs.insert(0, load_cheat_job_ad(cheat_ad_path(args.results_root, args.cheat_ad)))
-    jobs = apply_prefilter_metadata_to_jobs(jobs)
+    jobs = apply_prefilter_metadata_to_jobs(jobs, config=matching_config.prefilter)
     update_audits_with_prefilter_counts(search_audits, jobs)
 
     if not jobs:

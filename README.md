@@ -12,6 +12,15 @@ python3 linkedin_guest_jobs.py --card-limit 100 --detail-limit 100 --max-pages 1
 
 The scraper writes a timestamped JSON file under `results/discard/` by default, or under `results/waiting_room/` in the scheduled workflow. Each job includes local prefilter metadata (`prefilter_pass`, reason, positive matches, and negative matches). OpenAI evaluation skips jobs rejected by this local prefilter and writes them as discards without an API call.
 
+Local prefilter keywords can be overridden with a private matching config:
+
+```bash
+cp job_matching.template.jsonc job_matching.json
+python3 linkedin_guest_jobs.py --matching-config job_matching.json --card-limit 100 --detail-limit 100 --max-pages 10
+```
+
+If `--matching-config` is omitted, `linkedin_guest_jobs.py` automatically uses `job_matching.json` when it exists in the working directory. Otherwise it keeps the built-in defaults.
+
 ## Classify latest scrape
 
 The current matcher is a mock AI model. It marks a job as a hit only when the standalone word `engineer` appears in the job description, case-insensitively.
