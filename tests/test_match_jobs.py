@@ -8,13 +8,18 @@ from pathlib import Path
 
 from match_jobs import (
     CHEAT_JOB_ID,
+    DEFAULT_OPENAI_MATCH_LEVEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
+    MATCH_LEVEL_DECENT,
+    MATCH_LEVEL_GOOD,
+    MATCH_LEVEL_UNICORN,
     OPENAI_TRIAGE_MAX_OUTPUT_TOKENS,
     OPENAI_TRIAGE_MIN_OUTPUT_TOKENS,
     OPENAI_RESPONSES_URL,
     assert_cheat_mode_language_model_hit,
     call_openai_structured_json,
+    call_openai_profile_match_decision,
     call_openai_title_vowel_decision,
     call_openai_title_vowel_matcher,
     call_openai_unicorn_decision,
@@ -33,9 +38,14 @@ from match_jobs import (
     load_job_profile,
     load_waiting_room_jobs,
     mock_match_decision,
+    normalize_openai_match_level,
     openai_two_stage_decisions,
     openai_prefiltered_two_stage_decisions,
+    openai_decent_match_confirmation_prompt,
+    openai_good_match_confirmation_prompt,
+    openai_match_triage_prompt,
     openai_title_vowel_prompt,
+    openai_unicorn_confirmation_prompt,
     openai_unicorn_triage_prompt,
     openai_unicorn_prompt,
     parse_match_response,
@@ -99,6 +109,13 @@ class MockMatcherTests(unittest.TestCase):
         self.assertTrue(cache_key.startswith("job-profile:"))
         self.assertNotIn("Candidate", cache_key)
 
+    def test_openai_match_level_defaults_to_good_match(self) -> None:
+        self.assertEqual(DEFAULT_OPENAI_MATCH_LEVEL, MATCH_LEVEL_GOOD)
+        self.assertEqual(normalize_openai_match_level(None), MATCH_LEVEL_GOOD)
+        self.assertEqual(normalize_openai_match_level("good-match"), MATCH_LEVEL_GOOD)
+        self.assertEqual(normalize_openai_match_level("decent match"), MATCH_LEVEL_DECENT)
+        self.assertEqual(normalize_openai_match_level("unicorn"), MATCH_LEVEL_UNICORN)
+
     def test_triage_max_output_tokens_scales_with_job_count(self) -> None:
         self.assertEqual(triage_max_output_tokens(0), OPENAI_TRIAGE_MIN_OUTPUT_TOKENS)
         self.assertEqual(triage_max_output_tokens(1), 280)
@@ -129,6 +146,24 @@ class MockMatcherTests(unittest.TestCase):
         self.assertIn("Location: Lund", prompt)
         self.assertIn("Description: Build regulated medical devices.", prompt)
 
+    def test_openai_final_layer_has_three_match_level_prompts(self) -> None:
+        job = {
+            "title": "Principal Safety Engineer",
+            "company": "Example AB",
+            "location": "Lund",
+            "description": "Build regulated medical devices.",
+        }
+        profile = "Candidate has regulated medical device and product leadership experience."
+
+        decent = openai_decent_match_confirmation_prompt(job, profile)
+        good = openai_good_match_confirmation_prompt(job, profile)
+        unicorn = openai_unicorn_confirmation_prompt(job, profile)
+
+        self.assertIn("decent match", decent)
+        self.assertIn("good match", good)
+        self.assertIn("rare 'unicorn' match", unicorn)
+        self.assertEqual(len({decent, good, unicorn}), 3)
+
     def test_openai_unicorn_triage_prompt_batches_jobs_with_profile_once(self) -> None:
         prompt = openai_unicorn_triage_prompt(
             [
@@ -151,6 +186,15 @@ class MockMatcherTests(unittest.TestCase):
         self.assertNotIn("Full ad text should stay out of triage.", prompt)
         self.assertIn('"requirements": "Maintain web UI."', prompt)
         self.assertIn("temporary candidate list", prompt)
+
+    def test_openai_default_triage_prompt_does_not_use_unicorn_term(self) -> None:
+        prompt = openai_match_triage_prompt(
+            [{"job_id": "1", "title": "Backend Engineer", "description": "Build Python services."}],
+            "Candidate profile",
+        )
+
+        self.assertIn("good match workflow", prompt)
+        self.assertNotIn("unicorn", prompt.lower())
 
     def test_openai_prompt_uses_job_title_only(self) -> None:
         prompt = openai_title_vowel_prompt({"title": "Analyst", "description": "Engineer needed"})
@@ -311,6 +355,27 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual(decision["model"], "gpt-5.4-mini-test")
         self.assertEqual(decision["usage"], {"input_tokens": 100, "output_tokens": 20})
 
+    def test_openai_profile_match_decision_uses_requested_level(self) -> None:
+        calls = []
+
+        def fake_post(url, payload, headers):
+            calls.append((url, payload, headers))
+            return {"output_text": '{"hit": true, "reason": "Meaningful overlap."}'}
+
+        decision = call_openai_profile_match_decision(
+            {"job_id": "1", "title": "Backend Developer", "description": "Build Python systems."},
+            "test-key",
+            "Candidate profile: Python backend systems.",
+            match_level="decent-match",
+            post_json=fake_post,
+        )
+
+        payload = calls[0][1]
+        self.assertEqual(payload["text"]["format"]["name"], "job_decent_match")
+        self.assertIn("decent match", payload["input"])
+        self.assertNotIn("rare 'unicorn' match", payload["input"])
+        self.assertEqual(decision["match_level"], MATCH_LEVEL_DECENT)
+
     def test_openai_triage_posts_batched_request_without_network(self) -> None:
         calls = []
 
@@ -351,16 +416,16 @@ class MockMatcherTests(unittest.TestCase):
 
         def fake_post(url, payload, headers):
             calls.append(payload)
-            if payload["text"]["format"]["name"] == "job_unicorn_triage":
+            if payload["text"]["format"]["name"] == "job_good_match_triage":
                 return {
                     "model": "gpt-5.4-mini-test",
                     "usage": {"input_tokens": 500, "output_tokens": 50},
-                    "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Rare domain overlap."}]}',
+                    "output_text": '{"candidates": [{"candidate_id": "1", "reason": "Strong domain overlap."}]}',
                 }
             return {
                 "model": "gpt-5.4-mini-test",
                 "usage": {"input_tokens": 300, "output_tokens": 30},
-                "output_text": '{"hit": true, "reason": "Confirmed rare fit."}',
+                "output_text": '{"hit": true, "reason": "Confirmed good fit."}',
             }
 
         decisions = openai_two_stage_decisions(
@@ -374,14 +439,18 @@ class MockMatcherTests(unittest.TestCase):
             post_json=fake_post,
         )
 
-        self.assertEqual([call["text"]["format"]["name"] for call in calls], ["job_unicorn_triage", "job_unicorn_match"])
+        self.assertEqual([call["text"]["format"]["name"] for call in calls], ["job_good_match_triage", "job_good_match"])
         self.assertEqual(calls[0]["prompt_cache_key"], profile_cache_key("Candidate profile"))
         self.assertEqual(calls[1]["prompt_cache_key"], profile_cache_key("Candidate profile"))
+        self.assertIn("good match", calls[1]["input"])
+        self.assertNotIn("unicorn", calls[1]["input"].lower())
         self.assertEqual([decision["hit"] for decision in decisions], [True, False])
         self.assertEqual(decisions[0]["stage"], "confirmation")
-        self.assertEqual(decisions[0]["triage_reason"], "Rare domain overlap.")
+        self.assertEqual(decisions[0]["triage_reason"], "Strong domain overlap.")
         self.assertEqual(decisions[1]["stage"], "triage")
         self.assertEqual(decisions[1]["reason"], "Rejected by Eval 2: LLM triage.")
+        self.assertEqual(decisions[0]["match_level"], MATCH_LEVEL_GOOD)
+        self.assertEqual(decisions[1]["match_level"], MATCH_LEVEL_GOOD)
         self.assertEqual(decisions[0]["triage_candidate_count"], 1)
         self.assertEqual(decisions[1]["triage_candidate_count"], 1)
         self.assertEqual(decisions[0]["usage"], {"input_tokens": 300, "output_tokens": 30})

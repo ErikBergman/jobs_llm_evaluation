@@ -27,6 +27,16 @@ SEARCH_AUDIT_SUFFIX = "_search_audit.json"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 512
 CHEAT_JOB_ID = "cheat-mode-perfect-job"
+MATCH_LEVEL_DECENT = "decent_match"
+MATCH_LEVEL_GOOD = "good_match"
+MATCH_LEVEL_UNICORN = "unicorn"
+DEFAULT_OPENAI_MATCH_LEVEL = MATCH_LEVEL_GOOD
+OPENAI_MATCH_LEVELS = (MATCH_LEVEL_DECENT, MATCH_LEVEL_GOOD, MATCH_LEVEL_UNICORN)
+OPENAI_MATCH_LEVEL_LABELS = {
+    MATCH_LEVEL_DECENT: "decent match",
+    MATCH_LEVEL_GOOD: "good match",
+    MATCH_LEVEL_UNICORN: "unicorn",
+}
 OPENAI_TRIAGE_BASE_OUTPUT_TOKENS = 160
 OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 120
 OPENAI_TRIAGE_MIN_OUTPUT_TOKENS = 256
@@ -219,6 +229,69 @@ def compact_job_ad(job: dict[str, Any], candidate_id: str) -> dict[str, str]:
     return {key: value for key, value in fields.items() if isinstance(value, str) and value.strip()}
 
 
+def normalize_openai_match_level(match_level: str | None) -> str:
+    value = (match_level or DEFAULT_OPENAI_MATCH_LEVEL).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "decent": MATCH_LEVEL_DECENT,
+        "decent_match": MATCH_LEVEL_DECENT,
+        "good": MATCH_LEVEL_GOOD,
+        "good_match": MATCH_LEVEL_GOOD,
+        "unicorn": MATCH_LEVEL_UNICORN,
+        "unicorn_match": MATCH_LEVEL_UNICORN,
+    }
+    normalized = aliases.get(value)
+    if normalized is None:
+        allowed = ", ".join(sorted(OPENAI_MATCH_LEVEL_LABELS.values()))
+        raise ValueError(f"Unsupported OpenAI match level: {match_level!r}. Expected one of: {allowed}")
+    return normalized
+
+
+def openai_match_schema_name(match_level: str) -> str:
+    normalized_level = normalize_openai_match_level(match_level)
+    if normalized_level == MATCH_LEVEL_UNICORN:
+        return "job_unicorn_match"
+    return f"job_{normalized_level}"
+
+
+def openai_triage_schema_name(match_level: str) -> str:
+    normalized_level = normalize_openai_match_level(match_level)
+    if normalized_level == MATCH_LEVEL_UNICORN:
+        return "job_unicorn_triage"
+    return f"job_{normalized_level}_triage"
+
+
+def openai_decent_match_confirmation_prompt(job: dict[str, Any], profile: str) -> str:
+    return (
+        "You are a practical second-stage job-match classifier. This is a fresh, stateless review of one job ad "
+        "that passed a broad first-stage triage. Determine whether it is a decent match for the candidate profile. "
+        "Set hit=true when the ad has clear, meaningful overlap with the candidate's core skills, background, "
+        "or preferences and looks worth considering, even if it is not an unusually strong fit. Prefer false for "
+        "jobs that only share generic keywords, are dominated by responsibilities outside the profile, or have "
+        "obvious conflicts with the candidate's stated direction.\n\n"
+        "Return JSON only with:\n"
+        "- hit: boolean\n"
+        "- reason: one concise sentence explaining the decision\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        f"Job ad:\n{job_ad_text(job)}"
+    )
+
+
+def openai_good_match_confirmation_prompt(job: dict[str, Any], profile: str) -> str:
+    return (
+        "You are a selective second-stage job-match classifier. This is a fresh, stateless review of one job ad "
+        "that passed a broad first-stage triage. Determine whether it is a good match for the candidate profile. "
+        "Set hit=true when the ad aligns with several important parts of the candidate profile, such as core "
+        "skills, domain experience, seniority, location, work style, or stated preferences, and has no major "
+        "conflict with the candidate's direction. Prefer false for merely decent, speculative, generic, or "
+        "single-keyword matches.\n\n"
+        "Return JSON only with:\n"
+        "- hit: boolean\n"
+        "- reason: one concise sentence explaining the decision\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        f"Job ad:\n{job_ad_text(job)}"
+    )
+
+
 def openai_unicorn_prompt(job: dict[str, Any], profile: str) -> str:
     return (
         "You are a strict job-match classifier. Determine whether the job ad is a rare 'unicorn' match "
@@ -249,18 +322,51 @@ def openai_unicorn_confirmation_prompt(job: dict[str, Any], profile: str) -> str
     )
 
 
-def openai_unicorn_triage_prompt(jobs: list[dict[str, Any]], profile: str) -> str:
+def openai_match_confirmation_prompt(job: dict[str, Any], profile: str, match_level: str) -> str:
+    normalized_level = normalize_openai_match_level(match_level)
+    if normalized_level == MATCH_LEVEL_DECENT:
+        return openai_decent_match_confirmation_prompt(job, profile)
+    if normalized_level == MATCH_LEVEL_GOOD:
+        return openai_good_match_confirmation_prompt(job, profile)
+    if normalized_level == MATCH_LEVEL_UNICORN:
+        return openai_unicorn_confirmation_prompt(job, profile)
+    raise ValueError(f"Unsupported OpenAI match level: {match_level!r}")
+
+
+def openai_match_triage_prompt(
+    jobs: list[dict[str, Any]],
+    profile: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
+) -> str:
     ads = [
         compact_job_ad(job, job_candidate_id(job, index))
         for index, job in enumerate(jobs)
     ]
+    normalized_level = normalize_openai_match_level(match_level)
+    label = OPENAI_MATCH_LEVEL_LABELS[normalized_level]
+    if normalized_level == MATCH_LEVEL_DECENT:
+        selectivity = (
+            "Build a temporary candidate list containing jobs that might plausibly become decent matches after "
+            "full review. Include ads with meaningful profile overlap, but still reject clearly unrelated jobs, "
+            "generic keyword-only overlaps, and weak single-factor matches."
+        )
+    elif normalized_level == MATCH_LEVEL_GOOD:
+        selectivity = (
+            "Build a temporary candidate list containing only jobs that might plausibly become good matches after "
+            "full review. Be selective: generic engineering jobs, ordinary keyword matches, and weak "
+            "single-factor overlaps should not be candidates."
+        )
+    else:
+        selectivity = (
+            "Build a temporary candidate list containing only jobs that might plausibly become rare 'unicorn' "
+            "matches after full review. Be very selective: generic engineering jobs, ordinary keyword matches, "
+            "and weak single-factor overlaps should not be candidates."
+        )
     return (
-        "You are doing first-stage triage for a strict job-match workflow. Read the candidate profile once, "
+        f"You are doing first-stage triage for a {label} workflow. Read the candidate profile once, "
         "then scan compact job ads. The requirements field is an extracted requirements/profile section when "
-        "one could be found, otherwise it is the full job description. Build a temporary candidate list containing only jobs that might plausibly be "
-        "rare 'unicorn' matches after stricter review. Be selective: generic engineering jobs, ordinary keyword "
-        "matches, and weak single-factor overlaps should not be candidates. This stage may include uncertain but "
-        "promising ads, but it should still keep the list small.\n\n"
+        f"one could be found, otherwise it is the full job description. {selectivity} This stage may include "
+        "uncertain but promising ads, but it should still keep the list focused.\n\n"
         "Return JSON only with a candidates array. Each candidate must include:\n"
         "- candidate_id: exactly one candidate_id from the input ads\n"
         "- reason: one concise sentence explaining why it deserves second-stage review\n\n"
@@ -268,6 +374,10 @@ def openai_unicorn_triage_prompt(jobs: list[dict[str, Any]], profile: str) -> st
         "Job ads JSON:\n"
         f"{json.dumps(ads, ensure_ascii=False, indent=2)}"
     )
+
+
+def openai_unicorn_triage_prompt(jobs: list[dict[str, Any]], profile: str) -> str:
+    return openai_match_triage_prompt(jobs, profile, MATCH_LEVEL_UNICORN)
 
 
 def openai_title_vowel_prompt(job: dict[str, Any]) -> str:
@@ -528,22 +638,47 @@ def call_openai_unicorn_decision(
     )
 
 
-def call_openai_unicorn_triage(
-    jobs: list[dict[str, Any]],
+def call_openai_profile_match_decision(
+    job: dict[str, Any],
     api_key: str,
     profile: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
     model: str = DEFAULT_OPENAI_MODEL,
     prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    normalized_level = normalize_openai_match_level(match_level)
+    decision = call_openai_match_decision(
+        job,
+        api_key,
+        openai_match_confirmation_prompt(job, profile, normalized_level),
+        openai_match_schema_name(normalized_level),
+        model=model,
+        prompt_cache_key=prompt_cache_key,
+        post_json=post_json,
+    )
+    decision["match_level"] = normalized_level
+    return decision
+
+
+def call_openai_profile_match_triage(
+    jobs: list[dict[str, Any]],
+    api_key: str,
+    profile: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
+    model: str = DEFAULT_OPENAI_MODEL,
+    prompt_cache_key: str | None = None,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    normalized_level = normalize_openai_match_level(match_level)
     candidate_ids = {
         job_candidate_id(job, index)
         for index, job in enumerate(jobs)
     }
     response_payload, response_text = call_openai_structured_json(
         api_key,
-        openai_unicorn_triage_prompt(jobs, profile),
-        "job_unicorn_triage",
+        openai_match_triage_prompt(jobs, profile, normalized_level),
+        openai_triage_schema_name(normalized_level),
         triage_schema(),
         model=model,
         max_output_tokens=triage_max_output_tokens(len(jobs)),
@@ -559,18 +694,40 @@ def call_openai_unicorn_triage(
     }
 
 
-def openai_two_stage_decisions(
+def call_openai_unicorn_triage(
     jobs: list[dict[str, Any]],
     api_key: str,
     profile: str,
     model: str = DEFAULT_OPENAI_MODEL,
+    prompt_cache_key: str | None = None,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    cache_key = profile_cache_key(profile)
-    triage = call_openai_unicorn_triage(
+) -> dict[str, Any]:
+    return call_openai_profile_match_triage(
         jobs,
         api_key,
         profile,
+        MATCH_LEVEL_UNICORN,
+        model=model,
+        prompt_cache_key=prompt_cache_key,
+        post_json=post_json,
+    )
+
+
+def openai_two_stage_decisions(
+    jobs: list[dict[str, Any]],
+    api_key: str,
+    profile: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
+    model: str = DEFAULT_OPENAI_MODEL,
+    post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    normalized_level = normalize_openai_match_level(match_level)
+    cache_key = profile_cache_key(profile)
+    triage = call_openai_profile_match_triage(
+        jobs,
+        api_key,
+        profile,
+        normalized_level,
         model=model,
         prompt_cache_key=cache_key,
         post_json=post_json,
@@ -591,10 +748,11 @@ def openai_two_stage_decisions(
     confirmation_decisions: dict[str, dict[str, Any]] = {}
     for candidate in triage["candidates"]:
         candidate_id = candidate["candidate_id"]
-        confirmation = call_openai_unicorn_decision(
+        confirmation = call_openai_profile_match_decision(
             job_by_candidate_id[candidate_id],
             api_key,
             profile,
+            normalized_level,
             model=model,
             prompt_cache_key=cache_key,
             post_json=post_json,
@@ -620,9 +778,11 @@ def openai_two_stage_decisions(
                 "usage": None,
                 "stage": "triage",
                 "candidate_id": candidate_id,
+                "match_level": normalized_level,
             })
 
     for decision in decisions:
+        decision["match_level"] = normalized_level
         decision["triage_candidate_count"] = len(triage["candidates"])
         decision["triage_usage"] = triage["usage"]
         if decision.get("candidate_id") in triage_reasons:
@@ -818,15 +978,18 @@ def openai_prefiltered_two_stage_decisions(
     jobs: list[dict[str, Any]],
     api_key: str,
     profile: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
     model: str = DEFAULT_OPENAI_MODEL,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    normalized_level = normalize_openai_match_level(match_level)
     return apply_prefilter_to_decisions(
         jobs,
         lambda passing_jobs: openai_two_stage_decisions(
             passing_jobs,
             api_key,
             profile,
+            match_level=normalized_level,
             model=model,
             post_json=post_json,
         ),
@@ -1146,6 +1309,7 @@ def decisioner_from_args(
     matcher_name: str,
     api_key: str | None,
     model: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
     profile_path: Path = DEFAULT_JOB_PROFILE_PATH,
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     if matcher_name == "mock":
@@ -1153,12 +1317,24 @@ def decisioner_from_args(
     if matcher_name == "openai":
         resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         profile = load_job_profile(profile_path)
-        return lambda job: call_openai_unicorn_decision(job, resolved_api_key, profile, model=model)
+        normalized_level = normalize_openai_match_level(match_level)
+        return lambda job: call_openai_profile_match_decision(
+            job,
+            resolved_api_key,
+            profile,
+            normalized_level,
+            model=model,
+        )
     raise ValueError(f"Unsupported matcher: {matcher_name}")
 
 
-def matcher_from_args(matcher_name: str, api_key: str | None, model: str) -> Callable[[dict[str, Any]], bool]:
-    decisioner = decisioner_from_args(matcher_name, api_key, model)
+def matcher_from_args(
+    matcher_name: str,
+    api_key: str | None,
+    model: str,
+    match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
+) -> Callable[[dict[str, Any]], bool]:
+    decisioner = decisioner_from_args(matcher_name, api_key, model, match_level=match_level)
     return lambda job: bool(decisioner(job)["hit"])
 
 
@@ -1170,6 +1346,7 @@ def classify_file(
     decisions_provider: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
     matcher_name: str = DEFAULT_MATCHER,
     model: str | None = None,
+    match_level: str | None = None,
 ) -> tuple[Path, Path, Path, dict[str, Any]]:
     resolved_timestamp = timestamp or timestamp_from_input(input_path)
     jobs = load_jobs(input_path)
@@ -1190,6 +1367,8 @@ def classify_file(
         "discards_count": len(discards),
         "decisions": decisions,
     }
+    if matcher_name == "openai":
+        metadata["match_level"] = normalize_openai_match_level(match_level)
     write_json(hits_path, hits)
     write_json(discards_path, discards)
     write_object_json(metadata_path, metadata)
@@ -1335,6 +1514,12 @@ def main() -> int:
     parser.add_argument("--timestamp", help="Result timestamp folder name")
     parser.add_argument("--matcher", choices=("mock", "openai"), default=DEFAULT_MATCHER, help="Matcher backend")
     parser.add_argument("--openai-model", default=DEFAULT_OPENAI_MODEL, help="OpenAI model for --matcher openai")
+    env_match_level = os.environ.get("JOB_MATCH_LEVEL", "").strip()
+    parser.add_argument(
+        "--match-level",
+        default=env_match_level or "good-match",
+        help="OpenAI match strictness: decent-match, good-match, or unicorn. Defaults to good-match.",
+    )
     parser.add_argument("--job-profile", type=Path, default=DEFAULT_JOB_PROFILE_PATH, help="Candidate profile text file")
     env_llm_limit = os.environ.get("JOB_LLM_EVALUATION_LIMIT", "").strip()
     parser.add_argument(
@@ -1364,13 +1549,16 @@ def main() -> int:
             input_path = input_from_latest(args.output_root) if args.latest else args.input
         decisioner = mock_match_decision
         decisions_provider = None
+        match_level = None
         if args.matcher == "openai":
             api_key = os.environ.get("OPENAI_API_KEY", "")
             profile = load_job_profile(args.job_profile)
+            match_level = normalize_openai_match_level(args.match_level)
             decisions_provider = lambda jobs: openai_prefiltered_two_stage_decisions(
                 jobs,
                 api_key,
                 profile,
+                match_level=match_level,
                 model=args.openai_model,
             )
         hits_path, discards_path, metadata_path, metadata = classify_file(
@@ -1381,6 +1569,7 @@ def main() -> int:
             decisions_provider=decisions_provider,
             matcher_name=args.matcher,
             model=args.openai_model if args.matcher == "openai" else None,
+            match_level=match_level if args.matcher == "openai" else None,
         )
         if args.matcher == "openai":
             jobs = load_jobs(input_path)

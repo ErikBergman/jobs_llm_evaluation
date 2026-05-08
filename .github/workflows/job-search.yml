@@ -27,6 +27,7 @@ jobs:
       JOB_SEARCH_REQUEST_DELAY: ${{ vars.JOB_SEARCH_REQUEST_DELAY || '2' }}
       JOB_LLM_EVALUATION_LIMIT: ${{ vars.JOB_LLM_EVALUATION_LIMIT || '40' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
+      JOB_MATCH_LEVEL: ${{ vars.JOB_MATCH_LEVEL || 'good-match' }}
       CHEAT_MODE: ${{ vars.CHEAT_MODE || 'false' }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
       RUNTIME_RESULTS_DIR: runtime_results
@@ -190,6 +191,7 @@ jobs:
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           JOB_MATCHER_MODE: ${{ env.JOB_MATCHER_MODE }}
+          JOB_MATCH_LEVEL: ${{ env.JOB_MATCH_LEVEL }}
           OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
           JOB_LLM_EVALUATION_LIMIT: ${{ env.JOB_LLM_EVALUATION_LIMIT }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -209,6 +211,7 @@ jobs:
             --waiting-room \
             --output-root "$RUNTIME_RESULTS_DIR" \
             --matcher "$JOB_MATCHER_MODE" \
+            --match-level "$JOB_MATCH_LEVEL" \
             --openai-model "$OPENAI_MODEL" \
             --llm-limit "$JOB_LLM_EVALUATION_LIMIT" \
             --job-profile "$JOB_PROFILE_PATH" 2>&1 | tee classify.log

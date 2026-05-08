@@ -45,13 +45,13 @@ results/discard/<timestamp>/
 
 The matcher also has an OpenAI mode. It is intentionally not the default, because every API call costs money.
 
-OpenAI mode asks the model whether the job is a rare "unicorn" match for the candidate profile. It should only put a small fraction of unusually strong matches in `hits`; generic keyword overlap should stay in `discard`. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
+OpenAI mode asks the model whether the job meets the configured match level for the candidate profile. The default is `good-match`; `decent-match` is more inclusive, and `unicorn` is the strictest setting for rare unusually strong matches. Generic keyword overlap should stay in `discard`. It also asks the model for a short reason. This is a model-provided rationale, not hidden chain-of-thought.
 
 The evaluation flow uses three user-facing stages:
 
 1. Eval 1: Keywords removes obvious non-matches with a permissive local keyword screen.
 2. Eval 2: LLM triage reads the profile once and scans compact requirement/profile sections from Eval 1-passing ads.
-3. Eval 3: LLM confirmation performs a second, stateless review of jobs selected by triage.
+3. Eval 3: LLM confirmation performs a second, stateless review of jobs selected by triage using the configured match level.
 4. Confirmed jobs go to `results/hits/<timestamp>/`; everything else remains in `results/discard/<timestamp>/`.
 
 Eval 2 does not normally read the full job ad. At scrape time, the LinkedIn guest detail HTML is parsed for requirement/profile sections using heading patterns in English and Swedish, such as `Qualifications`, `Kvalifikationer`, `We believe you have`, `Vi tror att du har`, `Who are we looking for?`, `Vem söker vi?`, `Basic qualifications`, `Grundläggande kvalifikationer`, `Nice to have`, and `Meriterande`. Extraction stops at offer/application/about/legal/contact headings such as `We Offer You`, `Vi erbjuder dig`, `Apply Now`, `Ansökan`, `About us`, and `Om oss`.
@@ -64,6 +64,8 @@ Local usage:
 OPENAI_API_KEY=... python3 match_jobs.py --latest --matcher openai --job-profile job_profile.txt
 ```
 
+Use `--match-level decent-match`, `--match-level good-match`, or `--match-level unicorn` to change Eval 3 strictness. If omitted, OpenAI mode uses `good-match`.
+
 The profile file may be plain text or RTF. Local profile files named `job_profile.txt` or `job_profile.rtf` are ignored by git.
 
 Waiting-room evaluation can cap OpenAI spend with `--llm-limit N`. Prefilter-passing jobs above that cap are requeued in `results/waiting_room/<timestamp>/deferred_jobs.json` for a later evaluation instead of being discarded.
@@ -73,6 +75,7 @@ GitHub Actions usage:
 - add repository secret `OPENAI_API_KEY`
 - add repository secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for scheduled summaries
 - add repository variable `JOB_MATCHER_MODE=openai`
+- optionally add repository variable `JOB_MATCH_LEVEL=good-match` (`decent-match`, `good-match`, or `unicorn`)
 - optionally add repository variable `OPENAI_MODEL=gpt-5.4-mini`
 - keep `job_profile.rtf` in the configured Koofr memory folder
 
