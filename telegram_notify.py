@@ -157,6 +157,16 @@ def current_hits(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
     return hits
 
 
+def matching_level_message(metadata: dict[str, Any] | None) -> str:
+    match_level = metadata.get("match_level") if metadata else None
+    normalized = str(match_level or "good_match").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"decent", "decent_match"}:
+        return "Searching for decent matches"
+    if normalized in {"unicorn", "unicorn_match"}:
+        return "Searching for unicorn matches"
+    return "Searching for good matches"
+
+
 def truncate_message(message: str, limit: int = TELEGRAM_MAX_MESSAGE_LENGTH) -> str:
     if len(message) <= limit:
         return message
@@ -169,9 +179,11 @@ def build_message(
     accumulated_jobs: int,
     hits: list[dict[str, str]],
     hours: int = 12,
+    matching_level: str = "Searching for good matches",
 ) -> str:
     lines = [
         "Job search summary",
+        matching_level,
         f"Considered in last {hours} hours: {considered_last_hours}",
         f"Ads in memory: {accumulated_jobs}",
         f"New matches in this run: {len(hits)}",
@@ -215,6 +227,7 @@ def summary_message(results_root: Path, current_input: str | None, hours: int, n
         accumulated_jobs=accumulated_job_count(results_root),
         hits=current_hits(latest_metadata),
         hours=hours,
+        matching_level=matching_level_message(latest_metadata),
     )
 
 

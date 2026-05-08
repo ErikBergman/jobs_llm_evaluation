@@ -11,6 +11,7 @@ from telegram_notify import (
     current_hits,
     current_metadata,
     load_metadata_files,
+    matching_level_message,
     summary_message,
 )
 
@@ -110,6 +111,7 @@ class TelegramNotifyTests(unittest.TestCase):
                         "matched_at": "2026-04-25T17:07:23Z",
                         "input_path": str(input_path),
                         "job_count": 1,
+                        "match_level": "unicorn",
                         "decisions": [
                             {
                                 "job_id": "cheat-mode-perfect-job",
@@ -131,6 +133,7 @@ class TelegramNotifyTests(unittest.TestCase):
             )
 
         self.assertIn("Considered in last 12 hours: 1", message)
+        self.assertIn("Searching for unicorn matches", message)
         self.assertIn("Ads in memory: 1", message)
         self.assertIn("New matches in this run: 1", message)
         self.assertIn("cheat-mode://perfect-job-ad", message)
@@ -180,9 +183,16 @@ class TelegramNotifyTests(unittest.TestCase):
     def test_build_message_handles_no_matches(self) -> None:
         message = build_message(considered_last_hours=0, accumulated_jobs=4, hits=[], hours=12)
 
+        self.assertIn("Searching for good matches", message)
         self.assertIn("Considered in last 12 hours: 0", message)
         self.assertIn("Ads in memory: 4", message)
         self.assertIn("New matches in this run: 0", message)
+
+    def test_matching_level_message_formats_supported_levels(self) -> None:
+        self.assertEqual(matching_level_message({"match_level": "decent_match"}), "Searching for decent matches")
+        self.assertEqual(matching_level_message({"match_level": "good-match"}), "Searching for good matches")
+        self.assertEqual(matching_level_message({"match_level": "unicorn"}), "Searching for unicorn matches")
+        self.assertEqual(matching_level_message({}), "Searching for good matches")
 
     def test_load_metadata_files_ignores_unreadable_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
