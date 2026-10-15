@@ -1,0 +1,625 @@
+[
+  {
+    "employer": "Axis",
+    "url": "https://axis.wd3.myworkdayjobs.com/External_Career_Site",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "software-integration",
+      "technical-information",
+      "test-automation"
+    ],
+    "note": "Workday returned no readable listing content. Select Lund in the browser; source retained from the supplied seed."
+  },
+  {
+    "employer": "Tetra Pak",
+    "url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
+    "checked": "2026-10-15",
+    "verification": "access_limited",
+    "focus": [
+      "process-engineering",
+      "software-integration",
+      "technical-information"
+    ],
+    "note": "The supplied Lund search could not be read. The official careers homepage is readable; use its location search for Lund.",
+    "fallback_url": "https://jobs.tetrapak.com/"
+  },
+  {
+    "employer": "Alfa Laval",
+    "url": "https://career.alfalaval.com/jobs/search?query=Lund",
+    "checked": "2026-10-15",
+    "verification": "access_limited",
+    "focus": [
+      "process-engineering",
+      "technical-information",
+      "software-integration"
+    ],
+    "note": "The supplied Lund search could not be read. The official careers homepage is readable; search or filter for Lund there.",
+    "fallback_url": "https://career.alfalaval.com/"
+  },
+  {
+    "employer": "Region Skåne",
+    "url": "https://www.skane.se/jobb-och-utbildning/lediga-jobb/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "clinical-systems",
+      "software-integration",
+      "test-automation"
+    ],
+    "note": "Regional listing. Filter for Lund and inspect engineering, laboratory IT, integration and system-management roles; most healthcare occupations require other qualifications."
+  },
+  {
+    "employer": "CellaVision",
+    "url": "https://career.cellavision.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "clinical-systems",
+      "software-integration",
+      "test-automation"
+    ],
+    "note": "Lund diagnostics employer. Select Lund; inspect software, laboratory applications, integration and verification roles."
+  },
+  {
+    "employer": "Lund University / MAX IV",
+    "url": "https://lu.varbi.com/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Shared university recruitment portal, including MAX IV. Inspect research infrastructure, software, control-system and technical support roles; check each role for degree requirements."
+  },
+  {
+    "employer": "ESS",
+    "url": "https://ess.eu/careers/vacancies",
+    "checked": "2026-10-15",
+    "note": "Direct vacancies page confirmed from the official Careers link. Filter to Lund; ESS also recruits for its computing centre in Denmark.",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "software-integration",
+      "technical-information"
+    ],
+    "original_url": "https://ess.eu/careers",
+    "evidence_urls": [
+      "https://ess.eu/careers"
+    ]
+  },
+  {
+    "employer": "Sydvatten",
+    "url": "https://ledigajobb.sydvatten.se/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Regional water-treatment source retained from the seed. Check the actual office or plant location; not every position is in Lund."
+  },
+  {
+    "employer": "Kraftringen",
+    "url": "https://www.kraftringen.se/om-oss/karriar/lediga-jobb/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "software-integration",
+      "technical-information"
+    ],
+    "note": "Energy-sector employer. Select Lund and inspect process, automation, digitalisation and technical-information roles."
+  },
+  {
+    "employer": "VA SYD",
+    "url": "https://vasyd.varbi.com/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "software-integration",
+      "technical-information"
+    ],
+    "note": "Replaced the inaccessible seed URL with the VA SYD Varbi listing. Regional source retained from the seed; the reviewed openings are labelled Malmö, so confirm workplace before treating any role as Lund-based.",
+    "original_url": "https://www.vasyd.se/artiklar/karriar/lediga-jobb"
+  },
+  {
+    "employer": "Lunds kommun",
+    "url": "https://lund.se/arbete-och-lediga-jobb/lediga-jobb",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "technical-information",
+      "process-engineering"
+    ],
+    "note": "Municipal listing. Inspect IT integration, digitalisation and technical operations; verify role-specific qualifications."
+  },
+  {
+    "employer": "Hansa Biopharma",
+    "url": "https://career.hansabiopharma.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "clinical-systems",
+      "technical-information"
+    ],
+    "note": "Lund life-science employer. Filter for Lund; prospective targets include laboratory systems, data workflows and technical documentation."
+  },
+  {
+    "employer": "BioInvent",
+    "url": "https://careers.bioinvent.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Lund biotechnology employer. Inspect laboratory systems, process support, quality documentation and relevant engineering roles."
+  },
+  {
+    "employer": "Vantive",
+    "url": "https://jobs.vantive.com/en/search-jobs/Lund",
+    "checked": "2026-10-15",
+    "verification": "access_limited",
+    "focus": [
+      "clinical-systems",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "The supplied Lund listing could not be read during this review. Retained from the seed; verify in a browser before implementing ingestion."
+  },
+  {
+    "employer": "Camurus",
+    "url": "https://www.camurus.com/career/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Lund life-science employer. Inspect systems, process support, validation and technical-documentation roles; check specialist experience requirements."
+  },
+  {
+    "employer": "Clinisys",
+    "url": "https://careers.clinisys.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "clinical-systems",
+      "software-integration",
+      "test-automation"
+    ],
+    "note": "Laboratory software is relevant to the profile. This is an international listing; require Lund or an explicitly acceptable remote arrangement for each job."
+  },
+  {
+    "employer": "Arm",
+    "url": "https://careers.arm.com/location/lund-jobs/33099/2661886-3337385-2693678/4",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Lund-specific listing. Inspect software tooling, test automation and technical documentation; hardware and embedded-specialist requirements need separate assessment."
+  },
+  {
+    "employer": "Ericsson",
+    "url": "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden",
+    "checked": "2026-10-15",
+    "verification": "access_limited",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "The supplied Lund search could not be read during this review. Retained from the seed; confirm location and rendering in a browser."
+  },
+  {
+    "employer": "Qlik",
+    "url": "https://careerhub.qlik.com/careers",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Careers page identity confirmed, but no job records were exposed in the text view. Use a browser and filter to Lund."
+  },
+  {
+    "employer": "Sony",
+    "url": "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Workday returned no readable listing content. Retained from the seed; select Lund in the browser."
+  },
+  {
+    "employer": "Dassault Systèmes",
+    "url": "https://www.3ds.com/careers/jobs",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "software-integration",
+      "technical-information",
+      "test-automation"
+    ],
+    "note": "Official job-search interface is readable, but results were not exposed in the text view. Select Lund; inspect software, modelling tools and technical-information roles."
+  },
+  {
+    "employer": "Nordic Semiconductor",
+    "url": "https://careers.nordicsemi.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "test-automation",
+      "software-integration",
+      "technical-information"
+    ],
+    "note": "International listing. Select Lund; inspect software tooling, test automation and technical documentation rather than assuming every hardware role fits."
+  },
+  {
+    "employer": "Voyado",
+    "url": "https://careers.voyado.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "International listing. Select Lund and inspect backend, data integration, product support and software verification roles."
+  },
+  {
+    "employer": "Etteplan",
+    "url": "https://www.etteplan.com/careers/open-positions/",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "technical-information",
+      "process-engineering",
+      "software-integration"
+    ],
+    "note": "Use Open Positions as the entry point instead of the generic Apply Now page. Careers content is readable, but the text view did not expose the vacancy list. Filter to Lund in a browser.",
+    "original_url": "https://www.etteplan.com/careers/open-positions/apply-now/"
+  },
+  {
+    "employer": "AFRY",
+    "url": "https://afry.com/sv/karriar/lediga-jobb",
+    "checked": "2026-10-15",
+    "verification": "browser_required",
+    "focus": [
+      "process-engineering",
+      "software-integration",
+      "technical-information"
+    ],
+    "note": "Official recruitment interface confirmed, but the text view did not expose job results. Select Lund and relevant engineering or documentation disciplines."
+  },
+  {
+    "employer": "Combitech",
+    "url": "https://www.combitech.se/lediga-jobb/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "National listing. Select Lund and assess software, verification and technical-information requirements individually."
+  },
+  {
+    "employer": "Dokumentera",
+    "url": "https://www.dokumentera.se/jobba-hos-oss",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "technical-information",
+      "software-integration"
+    ],
+    "note": "Retained from the supplied seed for technical-information relevance. The reviewed careers page does not establish a Lund office; confirm Lund or an acceptable remote arrangement before treating it as local."
+  },
+  {
+    "employer": "Modelon",
+    "url": "https://modelon.careers.haileyhr.app/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Lund software and engineering-simulation employer. Direct recruitment board linked by its corporate careers page; select Lund. Inspect simulation software, engineering tools and technical-information roles.",
+    "evidence_urls": [
+      "https://www.modelon.com/company/careers/"
+    ]
+  },
+  {
+    "employer": "Lime Technologies",
+    "url": "https://jobs.lime-technologies.com/open-positions/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Lund is an explicit location in the recruitment board. Inspect CRM integrations, product engineering and technical consulting; roles listed elsewhere, including AI roles, are not automatically Lund roles."
+  },
+  {
+    "employer": "Avensia",
+    "url": "https://career.avensia.com/locations/lund",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Lund-specific careers page. Inspect commerce-system integration, software development, technical consulting and verification roles."
+  },
+  {
+    "employer": "Consafe Logistics",
+    "url": "https://careers.consafelogistics.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Warehouse-software employer headquartered in Lund. Filter to Lund; inspect integration, application development, implementation and testing roles.",
+    "evidence_urls": [
+      "https://www.consafelogistics.com/career"
+    ]
+  },
+  {
+    "employer": "Axiell",
+    "url": "https://careers.axiell.com/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "technical-information",
+      "test-automation"
+    ],
+    "note": "Official careers page confirms Lund headquarters. Library and collection-management software offers prospective integration, software-support and structured-information roles; check each vacancy location."
+  },
+  {
+    "employer": "InCoax",
+    "url": "https://www.incoax.com/incoax-career/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Official careers page identifies development, operations and product functions in Lund. Inspect software tooling, verification, technical support and product documentation. Page also accepts open applications; these are not ordinary vacancies."
+  },
+  {
+    "employer": "FlatFrog",
+    "url": "https://www.flatfrog.com/careers",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Official careers page confirms Lund headquarters. Prospective targets include collaboration software, testing and product documentation. No open positions were listed on review."
+  },
+  {
+    "employer": "Qlucore",
+    "url": "https://qlucore.com/vacancies",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "clinical-systems",
+      "software-integration",
+      "life-science"
+    ],
+    "note": "Lund bioinformatics and precision-diagnostics software employer, relevant to laboratory data workflows and scientific software. No vacancies were listed on review; retain for future openings."
+  },
+  {
+    "employer": "BONESUPPORT",
+    "url": "https://www.bonesupport.com/en/careers",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "technical-information",
+      "process-engineering"
+    ],
+    "note": "Lund medical-technology employer. Inspect quality documentation, clinical data workflows and engineering roles when offered. Careers page does not accept spontaneous applications; listed openings on review were outside Sweden.",
+    "evidence_urls": [
+      "https://www.bonesupport.com/en/contact"
+    ]
+  },
+  {
+    "employer": "Probi",
+    "url": "https://www.probi.com/about-us/careers/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Lund biotechnology employer. Inspect laboratory/process systems, quality and documentation roles. Corporate careers page is readable; its linked BambooHR job board returned no readable text, so verify the actual openings and location in a browser."
+  },
+  {
+    "employer": "Sigma Technology",
+    "url": "https://sigmatechnology.com/open-positions/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "technical-information",
+      "software-integration",
+      "test-automation"
+    ],
+    "note": "Lund appears in the location selector. Particularly relevant for technical information and documentation architecture, alongside software and test consulting. Filter by Lund and inspect client-location requirements.",
+    "evidence_urls": [
+      "https://www.sigma.se/position/erfarna-teknikinformatorer-goteborg-en-20260826/"
+    ]
+  },
+  {
+    "employer": "Prevas Test & Measurement (formerly DVel)",
+    "url": "https://prevastm.teamtailor.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "test-automation",
+      "software-integration",
+      "process-engineering"
+    ],
+    "note": "Lund test-and-measurement business. Inspect automated test systems, instrumentation and engineering verification. The board distinguishes a Lund measurement vacancy from an open application."
+  },
+  {
+    "employer": "Svep Design Center",
+    "url": "https://careers.svep.se/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Product-development company in Sankt Lars Park, Lund, with software and Cloud/IoT departments. Inspect software, verification and product-information roles. No open positions were listed on review.",
+    "evidence_urls": [
+      "https://careers.svep.se/",
+      "https://careers.svep.se/people"
+    ]
+  },
+  {
+    "employer": "Plantvision",
+    "url": "https://career.plantvision.se/jobs?location_id=2506",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "life-science",
+      "test-automation"
+    ],
+    "note": "Confirmed Lund-filtered listing. Inspect automation, life-science compliance, validation and production-system roles; check whether each consulting assignment actually permits Lund.",
+    "evidence_urls": [
+      "https://plantvision.se/en/careers/our-offices/"
+    ]
+  },
+  {
+    "employer": "AnoxKaldnes / Veolia Water Technologies",
+    "url": "https://www.anoxkaldnes.com/en/about/careers-anoxkaldnes",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "life-science",
+      "technical-information"
+    ],
+    "note": "Official careers page confirms Lund headquarters and biological water-treatment work. Strong prospective overlap with process design, laboratory work, equipment support and technical communication. Use the group board for advertised roles and select Lund / AnoxKaldnes.",
+    "evidence_urls": [
+      "https://jobs.veolia.com/en/search-jobs"
+    ]
+  },
+  {
+    "employer": "OptiCept Technologies",
+    "url": "https://www.opticept.se/jobs/",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "process-engineering",
+      "technical-information",
+      "test-automation"
+    ],
+    "note": "Official careers page confirms Lund headquarters. Food/plant process equipment is relevant to process development, equipment testing, field applications and technical documentation. Check actual listings and location before applying."
+  },
+  {
+    "employer": "Intui (formerly IntuiCell)",
+    "url": "https://careers.intui.ai/jobs",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "test-automation"
+    ],
+    "note": "The former IntuiCell careers domain redirects to Intui. Employer has advertised its technical/R&D office in Lund; inspect scientific software and research-engineering roles for requirements beyond the profile. No open positions were listed on review.",
+    "evidence_urls": [
+      "https://careers.intuicell.com/jobs",
+      "https://www.linkedin.com/posts/intuicell_head-of-ip-intuicell-activity-7373250369184940032-pw2R"
+    ]
+  },
+  {
+    "employer": "Repligen",
+    "url": "https://www.repligen.com/company/careers",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "life-science",
+      "process-engineering",
+      "technical-information"
+    ],
+    "note": "Bioprocessing employer with Lund operations confirmed by its own QA recruitment ad. Inspect process engineering, quality systems, validation and technical documentation. Corporate careers page links to Workday; the board requires browser verification.",
+    "evidence_urls": [
+      "https://repligen.wd108.myworkdayjobs.com/Repligen_Careers",
+      "https://repligen.wd108.myworkdayjobs.com/en-US/Repligen_Careers/job/Lund-Sweden/Quality-Assurance-Specialist-I_R-205"
+    ]
+  },
+  {
+    "employer": "RISE Research Institutes of Sweden",
+    "url": "https://www.ri.se/sv/om-rise/jobba-hos-oss/lediga-jobb",
+    "checked": "2026-10-15",
+    "verification": "verified",
+    "focus": [
+      "software-integration",
+      "process-engineering",
+      "life-science"
+    ],
+    "note": "National research employer listing includes Lund. Inspect applied research, engineering, automation and scientific-software roles. Separate permanent engineering positions from student theses, PhD and postdoctoral requirements.",
+    "evidence_urls": [
+      "https://www.ri.se/en/about-rise/work-with-us/open-job-positions"
+    ]
+  },
+  {
+    "employer": "Schneider Electric",
+    "url": "https://careers.se.com/jobs",
+    "checked": "2026-10-15",
+    "verification": "access_limited",
+    "focus": [
+      "software-integration",
+      "test-automation",
+      "technical-information"
+    ],
+    "note": "Employer recruitment ads confirm Lund software and data teams. The general board returned HTTP 403 during review; verify access in a browser and select Lund before building an adapter. Relevant search targets include software integration, data modelling and test automation.",
+    "evidence_urls": [
+      "https://careers.se.com/jobs/122804?lang=en-us",
+      "https://careers.se.com/jobs/125814?lang=en-us",
+      "https://careers.se.com/jobs/130035?lang=en-us&previousLocale=en-US"
+    ]
+  },
+  {
+    "employer": "Alligator Bioscience",
+    "url": "https://workwithus.alligatorbioscience.com/",
+    "checked": "2026-10-15",
+    "verification": "linked_only",
+    "focus": [
+      "life-science",
+      "technical-information",
+      "clinical-systems"
+    ],
+    "note": "Official corporate contact page confirms Lund headquarters and links this recruitment portal. Portal returned HTTP 502, so its listings remain unverified. Prospective targets are laboratory systems, data workflows and technical/quality documentation.",
+    "evidence_urls": [
+      "https://alligatorbioscience.se/en/contact/"
+    ]
+  }
+]
