@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -23,7 +24,9 @@ from linkedin_guest_jobs import (
     DEFAULT_MATCHING_CONFIG_PATH, JobDetail, apply_prefilter_metadata,
     extract_requirements_text_from_fragment, load_matching_config, load_seen_job_ids,
 )
-from dataclasses import asdict
+from dataclasses import asdict, replace
+
+import job_deduplication as deduplication
 
 CONFIG_PATH = Path(__file__).with_name("employer_scraping.json")
 VOID_TAGS = set("area base br col embed hr img input link meta param source track wbr".split())
@@ -1041,13 +1044,18 @@ def index_sources(sources, results_root, matching_config, limit=25, max_pages=20
     return jobs, audits
 
 
-def write_results(jobs, audits, results_root, bucket="waiting_room"):
+def write_results(jobs, audits, results_root, bucket="waiting_room", duplicates=None, deduplication_audit=None):
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    archive = deduplication.write_duplicate_archive(duplicates or [], results_root, stamp)
     folder = Path(results_root) / bucket / stamp
     folder.mkdir(parents=True, exist_ok=False)
     path = folder / "employer_jobs.json"
     path.write_text(json.dumps(jobs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     metadata = {"indexed_at": datetime.now(timezone.utc).isoformat(), "job_count": len(jobs), "sources": audits}
+    if deduplication_audit is not None:
+        metadata['deduplication'] = deduplication_audit
+        if archive:
+            metadata['deduplication']['duplicate_archive'] = str(archive)
     path.with_name("employer_jobs_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -1064,10 +1072,22 @@ def main(argv=None):
     parser.add_argument("--page-size", type=int, default=20)
     parser.add_argument("--request-delay", type=float, default=1)
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument('--deduplication-mode', choices=('openai', 'off'), default='openai',
+                        help='Check new employer ads against recent LinkedIn ads; uncertain/errors retain the ad')
+    parser.add_argument('--deduplication-config', type=Path, default=deduplication.CONFIG_PATH)
+    parser.add_argument('--deduplication-model', default=os.environ.get('JOB_DEDUPLICATION_MODEL'))
     args = parser.parse_args(argv)
     if min(args.limit, args.max_pages, args.page_size) <= 0 or args.request_delay < 0 or args.timeout <= 0:
         parser.error("Limits, page size and timeout must be positive; request delay cannot be negative")
     sources = load_sources(args.config)
+    dedup_config = None
+    if args.deduplication_mode == 'openai':
+        try:
+            dedup_config = deduplication.load_config(args.deduplication_config)
+            if args.deduplication_model:
+                dedup_config = replace(dedup_config, model=args.deduplication_model)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.source:
         missing = set(args.source) - {s["id"] for s in sources}
         if missing:
@@ -1078,7 +1098,18 @@ def main(argv=None):
         config_path = DEFAULT_MATCHING_CONFIG_PATH
     jobs, audits = index_sources(sources, args.results_root, load_matching_config(config_path), args.limit,
                                  args.max_pages, args.page_size, args.request_delay, args.timeout)
-    path = write_results(jobs, audits, args.results_root, args.results_bucket)
+    duplicates, dedup_audit = [], None
+    if dedup_config:
+        jobs, duplicates, dedup_audit = deduplication.filter_new_jobs(jobs, args.results_root, dedup_config)
+        for audit in audits:
+            audit['indexed_before_deduplication'] = audit['indexed']
+            audit['duplicates'] = sum(j.get('source_id') == audit['source_id'] for j in duplicates)
+            audit['indexed'] = sum(j.get('source_id') == audit['source_id'] for j in jobs)
+        print(f"[deduplication] kept={len(jobs)} duplicates={len(duplicates)} "
+              f"llm_calls={dedup_audit['llm_calls']} cache_hits={dedup_audit['cache_hits']}")
+        if dedup_audit['error_kept']:
+            print('[deduplication] Some comparisons unavailable; affected ads retained.')
+    path = write_results(jobs, audits, args.results_root, args.results_bucket, duplicates, dedup_audit)
     print(f"Wrote {path}")
     return 1 if any(a["status"] != "ok" for a in audits) else 0
 
