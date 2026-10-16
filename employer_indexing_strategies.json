@@ -2,739 +2,1302 @@
   {
     "employer": "Axis",
     "url": "https://axis.wd3.myworkdayjobs.com/External_Career_Site",
-    "status": "implemented-pilot",
+    "status": "implemented",
     "adapter_family": "workday",
     "source_id": "axis",
-    "discovery_strategy": "Resolve tenant and career-site identifiers from the official Workday page. Discover the Lund location facet from the public CXS response, then enumerate by offset with an empty keyword search.",
-    "detail_strategy": "Fetch public CXS detail JSON for full descriptions, stable requisition IDs, application state, dates and all workplace locations.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Enumerate all offset pages and compare totals; reject repeated or prematurely empty pages.",
-    "next_step": "Keep fixture and live regression checks for this configured pilot.",
+    "discovery_strategy": "Use public CXS JSON to resolve the Lund location facet and enumerate all offsets with an empty keyword query. If configured and Lund has no facet, enumerate the Sweden country facet and verify detail cities.",
+    "detail_strategy": "Fetch full CXS job descriptions, requisition IDs, application state, dates and primary/additional locations.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Check advertised total, duplicate paths and prematurely empty pages; enforce the page cap.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://axis.wd3.myworkdayjobs.com/External_Career_Site"
-    ]
+      "https://axis.wd3.myworkdayjobs.com/External_Career_Site",
+      "https://axis.wd3.myworkdayjobs.com/wday/cxs/axis/External_Career_Site"
+    ],
+    "index_url": "https://axis.wd3.myworkdayjobs.com/External_Career_Site",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 31,
+      "indexed": 31,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 34
+    }
   },
   {
     "employer": "Tetra Pak",
     "url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
-    "status": "implemented-pilot",
+    "status": "implemented",
     "adapter_family": "feed",
     "source_id": "tetra-pak",
-    "discovery_strategy": "Read the public sitemap.xml response as RSS: it carries complete descriptions and Google-namespace workplace and expiry metadata. No JavaScript execution is needed.",
-    "detail_strategy": "Decode the feed description, retain canonical job URL and provider ID, and apply shared normalization.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Keep fixture and live regression checks for this configured pilot.",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund"
-    ]
+      "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
+      "https://jobs.tetrapak.com/sitemap.xml"
+    ],
+    "index_url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 248,
+      "indexed": 5,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Alfa Laval",
     "url": "https://career.alfalaval.com/jobs/search?query=Lund",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the readable corporate careers page and its search requests; identify the recruitment provider before choosing an adapter. Keep the supplied Lund URL as a navigation hint, not a working API.",
-    "detail_strategy": "Provider job detail JSON or JobPosting JSON-LD; scoped description HTML only after a representative page is verified.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "alfa-laval",
+    "discovery_strategy": "Parse Clinch job links within the official block-job-search-results and follow rel=next pagination. The supplied Lund query also returns non-Lund jobs, which must be checked independently.",
+    "detail_strategy": "Fetch full JobPosting JSON-LD, including double-encoded HTML descriptions and explicit location metadata.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://career.alfalaval.com/jobs/search?query=Lund"
-    ]
+    ],
+    "index_url": "https://career.alfalaval.com/jobs/search?query=Lund",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 13,
+      "indexed": 12,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 14
+    }
   },
   {
     "employer": "Region Skåne",
     "url": "https://www.skane.se/jobb-och-utbildning/lediga-jobb/",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Inspect the official listing form, pagination and individual assign/reference URLs. Use a public search response if exposed; otherwise parse the scoped job list.",
-    "detail_strategy": "Follow the official ad URL and extract JobPosting metadata or its dedicated advertisement container, preserving the assignment reference.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "blocked",
+    "adapter_family": "blocked",
+    "source_id": "region-skane",
+    "discovery_strategy": "Public listing and /lediga-jobb return HTTP 403; access to the official listing is blocked.",
+    "detail_strategy": "No ad ingestion while the official listing cannot be verified. Keep the source explicitly blocked.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Unverified because the official listing cannot be fetched.",
+    "next_step": "Revalidate the official listing using permitted access or an employer-published public feed/API; implement and verify the missing adapter once complete listing data is available.",
     "evidence_urls": [
       "https://www.skane.se/jobb-och-utbildning/lediga-jobb/"
-    ]
+    ],
+    "index_url": "https://www.skane.se/jobb-och-utbildning/lediga-jobb/",
+    "validated_on": "2026-10-16",
+    "coverage": "blocked",
+    "validation_status": "blocked",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 0
+    }
   },
   {
     "employer": "CellaVision",
     "url": "https://career.cellavision.com/jobs",
-    "status": "implemented-pilot",
+    "status": "implemented",
     "adapter_family": "feed",
     "source_id": "cellavision",
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Keep fixture and live regression checks for this configured pilot.",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks. Also inspect the corporate board for delegated recruiter links omitted from the native feed, using explicitly allowed hosts.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://career.cellavision.com/jobs"
-    ]
+      "https://career.cellavision.com/jobs",
+      "https://career.cellavision.com/jobs.rss"
+    ],
+    "index_url": "https://career.cellavision.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 4,
+      "indexed": 4,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 5
+    }
   },
   {
     "employer": "Lund University / MAX IV",
     "url": "https://lu.varbi.com/",
-    "status": "implemented-pilot",
+    "status": "implemented",
     "adapter_family": "feed",
     "source_id": "lund-university",
-    "discovery_strategy": "Verify the Varbi RSS feed and join its native job IDs to the official listing’s workplace table. Check that the employer’s actual table format matches the reusable metadata mapper.",
-    "detail_strategy": "Use complete RSS descriptions; retain date and deadline metadata. Missing workplace joins require investigation rather than assuming the employer city.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Keep fixture and live regression checks for this configured pilot.",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available. Join the listing pos-town/pos-ends cells by native job ID, independent of URL language.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://lu.varbi.com/"
-    ]
+      "https://lu.varbi.com/",
+      "https://lu.varbi.com/what:rssfeed/"
+    ],
+    "index_url": "https://lu.varbi.com/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 85,
+      "indexed": 79,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 2
+    }
   },
   {
     "employer": "ESS",
     "url": "https://ess.eu/careers/vacancies",
-    "status": "implemented-pilot",
+    "status": "implemented",
     "adapter_family": "reachmee",
     "source_id": "ess",
-    "discovery_strategy": "Resolve the official ReachMee bootstrap script, read its public iframe URL parameters and enumerate the jobsTable rows. Never execute the downloaded script.",
-    "detail_strategy": "Fetch the dedicated jobDescription container. Country metadata is primary; a narrowly matched explicit workplace sentence may establish Lund. Unknown locations remain in the audit for review.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Keep fixture and live regression checks for this configured pilot.",
+    "discovery_strategy": "Read the corporate ReachMee bootstrap script as literal data and resolve the public board table.",
+    "detail_strategy": "Fetch scoped h1 and jobDescription HTML; retain native job_id and board deadline.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Verified complete jobsTable on this employer; reject missing containers. Recheck any new customer for pagination.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://ess.eu/careers/vacancies",
       "https://ess.eu/careers"
-    ]
+    ],
+    "index_url": "https://ess.eu/careers/vacancies",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 3
+    }
   },
   {
     "employer": "Sydvatten",
     "url": "https://ledigajobb.sydvatten.se/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "sydvatten",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://ledigajobb.sydvatten.se/jobs"
-    ]
+      "https://ledigajobb.sydvatten.se/jobs",
+      "https://ledigajobb.sydvatten.se/jobs.rss"
+    ],
+    "index_url": "https://ledigajobb.sydvatten.se/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Kraftringen",
     "url": "https://www.kraftringen.se/om-oss/karriar/lediga-jobb/",
-    "status": "planned-unverified",
-    "adapter_family": "embedded-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Resolve the recruitment links or embed from the corporate vacancy page; then choose the verified provider adapter.",
-    "detail_strategy": "Provider detail JSON/JSON-LD first; scoped job-description markup as fallback.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "kraftringen",
+    "discovery_strategy": "Read official ledigt-jobb?jobid links.",
+    "detail_strategy": "Extract h1, scoped data-editorial-content and fact-box Stad/deadline fields. Ignore corporate footer addresses.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.kraftringen.se/om-oss/karriar/lediga-jobb/"
-    ]
+    ],
+    "index_url": "https://www.kraftringen.se/om-oss/karriar/lediga-jobb/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 4,
+      "indexed": 3,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 5
+    }
   },
   {
     "employer": "VA SYD",
     "url": "https://vasyd.varbi.com/",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the Varbi RSS feed and join its native job IDs to the official listing’s workplace table. Check that the employer’s actual table format matches the reusable metadata mapper.",
-    "detail_strategy": "Use complete RSS descriptions; retain date and deadline metadata. Missing workplace joins require investigation rather than assuming the employer city.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "va-syd",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available. Join the listing pos-town/pos-ends cells by native job ID, independent of URL language.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://vasyd.varbi.com/"
-    ]
+      "https://vasyd.varbi.com/",
+      "https://vasyd.varbi.com/what:rssfeed/"
+    ],
+    "index_url": "https://vasyd.varbi.com/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 7,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 2
+    }
   },
   {
     "employer": "Lunds kommun",
     "url": "https://lund.se/arbete-och-lediga-jobb/lediga-jobb",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Inspect the municipal vacancy list and its external recruitment links. Determine whether enumeration is server-rendered, embedded or backed by a public search request.",
-    "detail_strategy": "Preserve the municipal ad/application reference; use structured detail data or a narrowly scoped description container.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "feed",
+    "source_id": "lunds-kommun",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available. Join the listing pos-town/pos-ends cells by native job ID, independent of URL language.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://lund.se/arbete-och-lediga-jobb/lediga-jobb"
-    ]
+      "https://lund.se/arbete-och-lediga-jobb/lediga-jobb",
+      "https://lund.varbi.com/",
+      "https://lund.varbi.com/what:rssfeed/"
+    ],
+    "index_url": "https://lund.varbi.com/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 47,
+      "indexed": 40,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 2
+    }
   },
   {
     "employer": "Hansa Biopharma",
     "url": "https://career.hansabiopharma.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "hansa-biopharma",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://career.hansabiopharma.com/jobs"
-    ]
+      "https://career.hansabiopharma.com/jobs",
+      "https://career.hansabiopharma.com/jobs.rss"
+    ],
+    "index_url": "https://career.hansabiopharma.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 18,
+      "indexed": 2,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "BioInvent",
     "url": "https://careers.bioinvent.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "bioinvent",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://careers.bioinvent.com/jobs"
-    ]
+      "https://careers.bioinvent.com/jobs",
+      "https://careers.bioinvent.com/jobs.rss"
+    ],
+    "index_url": "https://careers.bioinvent.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Vantive",
     "url": "https://jobs.vantive.com/en/search-jobs/Lund",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the Lund search in a normal public HTTP session and resolve the underlying recruitment provider and geographic filters. Do not infer zero jobs from earlier tool access errors.",
-    "detail_strategy": "Use provider IDs and structured detail metadata; retain the employer-facing ad URL.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "vantive",
+    "discovery_strategy": "Read the TalentBrew Lund location page; require the search-results container and its advertised count, including the observed zero state.",
+    "detail_strategy": "Fetch full JobPosting JSON-LD when a current ad appears. No current detail was available in the Lund snapshot.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://jobs.vantive.com/en/search-jobs/Lund"
-    ]
+      "https://jobs.vantive.com/en/search-jobs/Lund",
+      "https://jobs.vantive.com/location/lund-jobs/47727/2661886-3337385-2693678/4"
+    ],
+    "index_url": "https://jobs.vantive.com/location/lund-jobs/47727/2661886-3337385-2693678/4",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Camurus",
     "url": "https://www.camurus.com/career/",
-    "status": "planned-unverified",
-    "adapter_family": "embedded-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Follow actual vacancy links from the corporate careers page to identify its current recruitment provider.",
-    "detail_strategy": "Use the provider adapter after confirmation, preferring structured full descriptions over career-page text.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "workspace",
+    "source_id": "camurus",
+    "discovery_strategy": "Discover the official Workspace Recruit script and parse its literal recruitments JSON array without executing JavaScript.",
+    "detail_strategy": "Follow the public /api/v1/ad/<id> URL and extract its scoped title and full content. Use city/country and deadline from portal records.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "The bootstrap publishes the complete recruitment array; reject missing/invalid arrays.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.camurus.com/career/"
-    ]
+    ],
+    "index_url": "https://www.camurus.com/career/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 6,
+      "indexed": 4,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 6
+    }
   },
   {
     "employer": "Clinisys",
     "url": "https://careers.clinisys.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "clinisys",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://careers.clinisys.com/jobs"
-    ]
+      "https://careers.clinisys.com/jobs",
+      "https://careers.clinisys.com/jobs.rss"
+    ],
+    "index_url": "https://careers.clinisys.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 53,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Arm",
     "url": "https://careers.arm.com/location/lund-jobs/33099/2661886-3337385-2693678/4",
-    "status": "planned-unverified",
-    "adapter_family": "location-board",
-    "source_id": null,
-    "discovery_strategy": "Inspect the Lund-specific location board and its pagination. Identify public search data or canonical job-detail links before writing HTML selectors.",
-    "detail_strategy": "Extract job identifiers, workplace and full ad from JobPosting JSON-LD or provider detail data.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "arm",
+    "discovery_strategy": "Enumerate TalentBrew job links inside search-results on the Lund location page.",
+    "detail_strategy": "Read full detail JobPosting JSON-LD and independently check all workplace locations.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://careers.arm.com/location/lund-jobs/33099/2661886-3337385-2693678/4"
-    ]
+    ],
+    "index_url": "https://careers.arm.com/location/lund-jobs/33099/2661886-3337385-2693678/4",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 13,
+      "indexed": 13,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 14
+    }
   },
   {
     "employer": "Ericsson",
     "url": "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the careers application bootstrap and its public search request, then apply a verified Lund location filter. Keep keyword search separate from geography.",
-    "detail_strategy": "Read provider detail JSON/JSON-LD and stable requisition IDs; report access failures explicitly.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "eightfold",
+    "source_id": "ericsson",
+    "discovery_strategy": "Page the public /api/pcsx/search endpoint with the employer domain and Lund location, then independently verify returned workplace cities (the search also returns nearby/remote jobs).",
+    "detail_strategy": "Fetch full JobPosting JSON-LD from the public /careers/job/<id> detail URL.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Advance start by the number of unique positions, compare count, reject duplicate or prematurely empty pages.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden"
-    ]
+      "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden",
+      "https://jobs.ericsson.com/api/pcsx/search"
+    ],
+    "index_url": "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 25,
+      "indexed": 24,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 27
+    }
   },
   {
     "employer": "Qlik",
     "url": "https://careerhub.qlik.com/careers",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the careers application bootstrap and public network responses to identify current provider, pagination and Lund filter.",
-    "detail_strategy": "Use structured full job descriptions and requisition IDs once the provider is verified.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "eightfold",
+    "source_id": "qlik",
+    "discovery_strategy": "Page the public /api/pcsx/search endpoint with the employer domain and Lund location, then independently verify returned workplace cities (the search also returns nearby/remote jobs).",
+    "detail_strategy": "Fetch full JobPosting JSON-LD from the public /careers/job/<id> detail URL.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Advance start by the number of unique positions, compare count, reject duplicate or prematurely empty pages.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://careerhub.qlik.com/careers"
-    ]
+      "https://careerhub.qlik.com/careers",
+      "https://careerhub.qlik.com/api/pcsx/search"
+    ],
+    "index_url": "https://careerhub.qlik.com/careers",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Sony",
     "url": "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "workday",
-    "source_id": null,
-    "discovery_strategy": "Resolve tenant and career-site identifiers from the official Workday page. Discover the Lund location facet from the public CXS response, then enumerate by offset with an empty keyword search.",
-    "detail_strategy": "Fetch public CXS detail JSON for full descriptions, stable requisition IDs, application state, dates and all workplace locations.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Enumerate all offset pages and compare totals; reject repeated or prematurely empty pages.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "sony",
+    "discovery_strategy": "Use public CXS JSON to resolve the Lund location facet and enumerate all offsets with an empty keyword query. If configured and Lund has no facet, enumerate the Sweden country facet and verify detail cities.",
+    "detail_strategy": "Fetch full CXS job descriptions, requisition IDs, application state, dates and primary/additional locations.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Check advertised total, duplicate paths and prematurely empty pages; enforce the page cap.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers"
-    ]
+      "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers",
+      "https://sonyglobal.wd1.myworkdayjobs.com/wday/cxs/sonyglobal/SonyGlobalCareers"
+    ],
+    "index_url": "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 3
+    }
   },
   {
     "employer": "Dassault Systèmes",
     "url": "https://www.3ds.com/careers/jobs",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the official job-search application and its public location/search requests. Resolve exact Lund options and enumerate all result pages.",
-    "detail_strategy": "Prefer structured job detail data or JobPosting JSON-LD; preserve requisition identity and canonical ad URLs.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "dassault",
+    "source_id": "dassault-systemes",
+    "discovery_strategy": "Enumerate all English career cards using the public /apisearch/card_search_api with the official career/language query. Filter authoritative location metadata after full discovery.",
+    "detail_strategy": "Use /GetCareerCardDetailV2/en/<card-id> for full external_description and external_qualification. Never use the truncated card summary as the job description.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Use 100-card pages, compare nhits and reject duplicate IDs, early empty pages and cap exhaustion. English cards avoid per-language duplicate requisitions.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://www.3ds.com/careers/jobs"
-    ]
+      "https://www.3ds.com/careers/jobs",
+      "https://www.3ds.com/apisearch"
+    ],
+    "index_url": "https://www.3ds.com/careers/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 694,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 7
+    }
   },
   {
     "employer": "Nordic Semiconductor",
     "url": "https://careers.nordicsemi.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "nordic-semiconductor",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://careers.nordicsemi.com/jobs"
-    ]
+      "https://careers.nordicsemi.com/jobs",
+      "https://careers.nordicsemi.com/jobs.rss"
+    ],
+    "index_url": "https://careers.nordicsemi.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 29,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Voyado",
     "url": "https://careers.voyado.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "voyado",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://careers.voyado.com/jobs"
-    ]
+      "https://careers.voyado.com/jobs",
+      "https://careers.voyado.com/jobs.rss"
+    ],
+    "index_url": "https://careers.voyado.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 7,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Etteplan",
     "url": "https://www.etteplan.com/careers/open-positions/",
-    "status": "planned-unverified",
-    "adapter_family": "embedded-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Start at Open Positions and resolve its current recruitment links or widget data. Do not enumerate the generic application form as if it were a job.",
-    "detail_strategy": "Use the verified provider detail format; technical-information roles must pass the same full-description validation.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "etteplan",
+    "source_id": "etteplan",
+    "discovery_strategy": "Read __NEXT_DATA__ at the Apply now listing. Deduplicate embedded openPositionMeta records and retain published Jobylon IDs, location lists and application dates.",
+    "detail_strategy": "Follow each selected Jobylon ad and extract full JobPosting JSON-LD; a missing JSON-LD location can use the explicit listing city list.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Deduplicate repeated SSR/cache payloads by provider ID; investigate schema changes instead of treating a missing payload as an empty board.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://www.etteplan.com/careers/open-positions/"
-    ]
+      "https://www.etteplan.com/careers/open-positions/",
+      "https://www.etteplan.com/careers/open-positions/apply-now/"
+    ],
+    "index_url": "https://www.etteplan.com/careers/open-positions/apply-now/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 100,
+      "indexed": 2,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 3
+    }
   },
   {
     "employer": "AFRY",
     "url": "https://afry.com/sv/karriar/lediga-jobb",
-    "status": "planned-unverified",
-    "adapter_family": "provider-discovery",
-    "source_id": null,
-    "discovery_strategy": "Follow official vacancy links to establish the current ATS and account. If those links expose a public postings API, enumerate it; otherwise use the official job list.",
-    "detail_strategy": "Prefer provider job JSON or JobPosting JSON-LD. Verify actual workplace for each consulting assignment.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "afry",
+    "source_id": "afry",
+    "discovery_strategy": "Read AFRY’s public /sv/api/afp-hr-smartrecruiteres-job-list cache, which contains the whole Adverts array with city/deadline metadata.",
+    "detail_strategy": "Extract h1 and the scoped advert--body HTML from active detail pages, retaining authoritative listing locations/deadlines. Verify a representative active non-Lund detail; the current Lund listing has expired and is skipped before fetching.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "The official cache is one complete Adverts payload; fail while CacheCold is true or the schema changes.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://afry.com/sv/karriar/lediga-jobb"
-    ]
+      "https://afry.com/sv/karriar/lediga-jobb",
+      "https://afry.com/sv/api/afp-hr-smartrecruiteres-job-list"
+    ],
+    "index_url": "https://afry.com/sv/karriar/lediga-jobb",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 633,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 1,
+      "requests": 1
+    }
   },
   {
     "employer": "Combitech",
     "url": "https://www.combitech.se/lediga-jobb/",
-    "status": "planned-unverified",
-    "adapter_family": "provider-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the official vacancy list for provider links, stable requisition IDs and paging. Reuse a known adapter only after provider identity is confirmed.",
-    "detail_strategy": "Use provider detail data/JSON-LD; retain the advertised workplace and all qualification requirements.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "combitech",
+    "source_id": "combitech",
+    "discovery_strategy": "Parse complete job-list cards from the official page; join each unique job_posting URL to its own h5 workplace and deadline fields.",
+    "detail_strategy": "Use the scoped workday-content-container and h1 on the corporate detail page.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Compare unique card URLs with the displayed tillgängliga tjänster count; fail on truncation or markup drift.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.combitech.se/lediga-jobb/"
-    ]
+    ],
+    "index_url": "https://www.combitech.se/lediga-jobb/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 65,
+      "indexed": 6,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 7
+    }
   },
   {
     "employer": "Dokumentera",
     "url": "https://www.dokumentera.se/jobba-hos-oss",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Inspect the careers page for actual vacancy links and any delegated recruitment board. Confirm a Lund workplace or approved remote scope before enabling.",
-    "detail_strategy": "Follow individual ads and prefer JobPosting metadata; exclude generic spontaneous-application and contact pages.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "dokumentera",
+    "source_id": "dokumentera",
+    "discovery_strategy": "Resolve IDs in the public __NEXT_DATA__ acf/job-listings block through the public WordPress /wp-json/wp/v2/jobs endpoint. Its published records omit deleted/unpublished IDs left in the page.",
+    "detail_strategy": "Fetch public /jobba-hos-oss/<slug> pages; read acf/long-content and the header’s verified location icon field. Current positions are in Stockholm.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Batch at most 100 IDs per REST request within the page cap; validate published state and returned IDs.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://www.dokumentera.se/jobba-hos-oss"
-    ]
+      "https://www.dokumentera.se/jobba-hos-oss",
+      "https://admin.dokumentera.se/wp-json/wp/v2/jobs"
+    ],
+    "index_url": "https://www.dokumentera.se/jobba-hos-oss",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 5,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 7
+    }
   },
   {
     "employer": "Modelon",
     "url": "https://modelon.careers.haileyhr.app/",
-    "status": "planned-unverified",
-    "adapter_family": "hailey-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the officially linked Hailey board and its public listing payload or rendered job links. Confirm the selected Lund location and complete enumeration.",
-    "detail_strategy": "Use public job JSON or per-ad JobPosting JSON-LD; flag thesis opportunities separately in the retained ad text.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "hailey",
+    "source_id": "modelon",
+    "discovery_strategy": "Parse the public Next Flight jobAds array from the server-rendered page. Reassemble split push chunks and compare any displayed ad count.",
+    "detail_strategy": "Reassemble byte-length-delimited Flight text records to obtain full Markdown, with title and workplace from jobAds metadata. Never execute the scripts.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "The embedded array is complete for the observed board; reject inconsistent displayed counts or missing data.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://modelon.careers.haileyhr.app/",
       "https://www.modelon.com/company/careers/"
-    ]
+    ],
+    "index_url": "https://modelon.careers.haileyhr.app/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 4,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 2
+    }
   },
   {
     "employer": "Lime Technologies",
     "url": "https://jobs.lime-technologies.com/open-positions/",
-    "status": "planned-unverified",
-    "adapter_family": "multi-provider-aggregator",
-    "source_id": null,
-    "discovery_strategy": "Enumerate the corporate job board and follow its actual Jobylon and Personio links. Preserve Lund versus other-office distinctions.",
-    "detail_strategy": "Use each linked provider’s structured detail data or JSON-LD. Deduplicate exact canonical URLs across providers and corporate cards.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "lime-technologies",
+    "discovery_strategy": "Read verified Jobylon and Personio ad links on the corporate Open Positions page.",
+    "detail_strategy": "Use JobPosting JSON-LD. For Personio pages without JSON-LD, read stable title/description classes and the scoped location component. Check each office rather than assuming Lund.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://jobs.lime-technologies.com/open-positions/"
-    ]
+    ],
+    "index_url": "https://jobs.lime-technologies.com/open-positions/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 17,
+      "indexed": 4,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 18
+    }
   },
   {
     "employer": "Avensia",
     "url": "https://career.avensia.com/locations/lund",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "avensia",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://career.avensia.com/locations/lund"
-    ]
+      "https://career.avensia.com/locations/lund",
+      "https://career.avensia.com/jobs.rss"
+    ],
+    "index_url": "https://career.avensia.com/locations/lund",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 2,
+      "indexed": 2,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Consafe Logistics",
     "url": "https://careers.consafelogistics.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "consafe-logistics",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://careers.consafelogistics.com/jobs",
-      "https://www.consafelogistics.com/career"
-    ]
+      "https://www.consafelogistics.com/career",
+      "https://careers.consafelogistics.com/jobs.rss"
+    ],
+    "index_url": "https://careers.consafelogistics.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Axiell",
     "url": "https://careers.axiell.com/",
-    "status": "planned-unverified",
-    "adapter_family": "embedded-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the corporate careers listing and its actual recruitment destinations; determine the provider from live links rather than assuming its URL pattern.",
-    "detail_strategy": "Use the linked provider’s job data/JSON-LD and stable ad identifier.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "workspace",
+    "source_id": "axiell",
+    "discovery_strategy": "Discover the official Workspace Recruit script and parse its literal recruitments JSON array without executing JavaScript.",
+    "detail_strategy": "Follow the public /api/v1/ad/<id> URL and extract its scoped title and full content. Use city/country and deadline from portal records.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "The bootstrap publishes the complete recruitment array; reject missing/invalid arrays.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://careers.axiell.com/"
-    ]
+    ],
+    "index_url": "https://careers.axiell.com/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 4,
+      "indexed": 2,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 4
+    }
   },
   {
     "employer": "InCoax",
     "url": "https://www.incoax.com/incoax-career/",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Enumerate the scoped open-position section of the career page. Treat the standing open-application form as a separate opportunity type, not a live vacancy.",
-    "detail_strategy": "Follow an ad link or extract a dedicated inline advertisement block with an explicit title and workplace; never use the whole careers page as an ad.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "incoax",
+    "discovery_strategy": "Monitor the careers page for discrete job links and its observed Open Applications marker. The standing application form is not emitted as a current vacancy.",
+    "detail_strategy": "If a discrete ad appears, attempt full JobPosting JSON-LD; an unsupported changed page becomes a source error for review.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.incoax.com/incoax-career/"
-    ]
+    ],
+    "index_url": "https://www.incoax.com/incoax-career/",
+    "validated_on": "2026-10-16",
+    "coverage": "monitor-only-until-discrete-advertisements-appear",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "FlatFrog",
     "url": "https://www.flatfrog.com/careers",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Read the dedicated Available jobs section; recognise its explicit no-open-positions message. Follow future ad links and fail if the expected section disappears.",
-    "detail_strategy": "Use JobPosting JSON-LD if introduced, otherwise a verified ad container; stable IDs may derive from canonical ad URLs.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "flatfrog",
+    "discovery_strategy": "Monitor for job links or the explicit We currently have no open positions state.",
+    "detail_strategy": "If an ad appears, fetch JobPosting JSON-LD; missing expected structures must trigger source review.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.flatfrog.com/careers"
-    ]
+    ],
+    "index_url": "https://www.flatfrog.com/careers",
+    "validated_on": "2026-10-16",
+    "coverage": "monitor-only-until-discrete-advertisements-appear",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Qlucore",
     "url": "https://qlucore.com/vacancies",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Read Current Openings on the official careers page; an explicit no-vacancies message is a healthy empty board. Follow future ad links.",
-    "detail_strategy": "Prefer JobPosting JSON-LD or the dedicated inline/link detail body; retain scientific/software requirements.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "qlucore",
+    "discovery_strategy": "Monitor for /vacancies/<detail> links or the explicit We have no vacancies at the moment state.",
+    "detail_strategy": "If an ad appears, fetch full JobPosting JSON-LD; missing expected structures must trigger source review.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://qlucore.com/vacancies"
-    ]
+    ],
+    "index_url": "https://qlucore.com/vacancies",
+    "validated_on": "2026-10-16",
+    "coverage": "monitor-only-until-discrete-advertisements-appear",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "BONESUPPORT",
     "url": "https://www.bonesupport.com/en/careers",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Enumerate Present Vacancies and follow official recruiter links. Location-filter each ad because the board also advertises overseas roles.",
-    "detail_strategy": "Use recruiter detail JSON-LD or the employer’s scoped ad body; do not convert the general HR contact into a vacancy.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "bonesupport",
+    "discovery_strategy": "Follow externally hosted King & Bishop job links published on the employer careers page.",
+    "detail_strategy": "Use full JobPosting JSON-LD and actual location. Detail HTTP 404/410 means the linked ad was withdrawn, not a healthy empty listing; record it in the expired/withdrawn audit.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.bonesupport.com/en/careers",
       "https://www.bonesupport.com/en/contact"
-    ]
+    ],
+    "index_url": "https://www.bonesupport.com/en/careers",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 2,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 1,
+      "requests": 3
+    }
   },
   {
     "employer": "Probi",
     "url": "https://www.probi.com/about-us/careers/",
-    "status": "planned-unverified",
-    "adapter_family": "bamboohr-discovery",
-    "source_id": null,
-    "discovery_strategy": "Follow the corporate careers page’s verified BambooHR link. Inspect the public careers listing response and paging in the current site.",
-    "detail_strategy": "Use public BambooHR job data or JobPosting JSON-LD after endpoint verification; confirm Lund from workplace metadata.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "bamboohr",
+    "source_id": "probi",
+    "discovery_strategy": "Read the public /careers/list JSON endpoint, including the genuine empty result state.",
+    "detail_strategy": "Read the public /careers/<id>/detail JSON for the full jobOpening description, application state and location. A representative Redmond detail was verified because the current list has no Lund ads.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Compare meta.totalCount with result length; reject incomplete or changed schemas.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://www.probi.com/about-us/careers/"
-    ]
+      "https://www.probi.com/about-us/careers/",
+      "https://probi.bamboohr.com/careers",
+      "https://probi.bamboohr.com/careers/list"
+    ],
+    "index_url": "https://probi.bamboohr.com/careers",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 2,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Sigma Technology",
     "url": "https://sigmatechnology.com/open-positions/",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Inspect the Open Positions filters and their public response. Enumerate Lund results and any canonical sigma.se job links without restricting by role keywords.",
-    "detail_strategy": "Read structured ad data or a scoped job-description container; preserve consulting locations and requisition IDs.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "sigma",
+    "source_id": "sigma-technology",
+    "discovery_strategy": "Page the public WordPress sigma_profiler/positions endpoint with the observed Sigma Technology company and Lund filters; still verify each returned city list.",
+    "detail_strategy": "Combine complete description, qualifications, experience and offer fields. Parse English long-form expiration dates and preserve public detail URLs.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Advance offset by unique records and compare total; reject repeated or prematurely empty pages.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://sigmatechnology.com/open-positions/",
-      "https://www.sigma.se/position/erfarna-teknikinformatorer-goteborg-en-20260826/"
-    ]
+      "https://www.sigma.se/position/erfarna-teknikinformatorer-goteborg-en-20260826/",
+      "https://sigmatechnology.com/wp-json/sigma_profiler/positions"
+    ],
+    "index_url": "https://sigmatechnology.com/open-positions/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 4,
+      "indexed": 4,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Prevas Test & Measurement (formerly DVel)",
     "url": "https://prevastm.teamtailor.com/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "prevas-test-measurement",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
-      "https://prevastm.teamtailor.com/jobs"
-    ]
+      "https://prevastm.teamtailor.com/jobs",
+      "https://prevastm.teamtailor.com/jobs.rss"
+    ],
+    "index_url": "https://prevastm.teamtailor.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 2,
+      "indexed": 2,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Svep Design Center",
     "url": "https://careers.svep.se/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "svep",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://careers.svep.se/jobs",
       "https://careers.svep.se/",
-      "https://careers.svep.se/people"
-    ]
+      "https://careers.svep.se/people",
+      "https://careers.svep.se/jobs.rss"
+    ],
+    "index_url": "https://careers.svep.se/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Plantvision",
     "url": "https://career.plantvision.se/jobs?location_id=2506",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "plantvision",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://career.plantvision.se/jobs?location_id=2506",
-      "https://plantvision.se/en/careers/our-offices/"
-    ]
+      "https://plantvision.se/en/careers/our-offices/",
+      "https://career.plantvision.se/jobs.rss"
+    ],
+    "index_url": "https://career.plantvision.se/jobs?location_id=2506",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 10,
+      "indexed": 4,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "AnoxKaldnes / Veolia Water Technologies",
     "url": "https://www.anoxkaldnes.com/en/about/careers-anoxkaldnes",
-    "status": "planned-unverified",
-    "adapter_family": "group-board-discovery",
-    "source_id": null,
-    "discovery_strategy": "Use the verified Veolia recruitment board for actual vacancies, selecting AnoxKaldnes and Lund where available. The subsidiary careers landing page is supporting evidence only.",
-    "detail_strategy": "Use provider detail data/JSON-LD and verify the employing unit as well as workplace.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "anoxkaldnes",
+    "discovery_strategy": "Use the readable Veolia TalentBrew board with Lund discovery; independently verify workplace metadata because it is a keyword search.",
+    "detail_strategy": "Fetch complete JobPosting JSON-LD from the official Veolia detail URL. This shared group board can include other Veolia Lund business units.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.anoxkaldnes.com/en/about/careers-anoxkaldnes",
-      "https://jobs.veolia.com/en/search-jobs"
-    ]
+      "https://jobs.veolia.com/en/search-jobs",
+      "https://jobs.veolia.com/en/search-jobs/Lund"
+    ],
+    "index_url": "https://jobs.veolia.com/en/search-jobs/Lund",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 2
+    }
   },
   {
     "employer": "OptiCept Technologies",
     "url": "https://www.opticept.se/jobs/",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Enumerate the Open Positions section and individual job links. Recognise a genuine empty section and exclude distributor/agent recruitment.",
-    "detail_strategy": "Prefer structured job data; otherwise extract only the advertisement body and explicit workplace metadata.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "html",
+    "source_id": "opticept",
+    "discovery_strategy": "Read the employer’s /job-<slug>/ ad links from its jobs page.",
+    "detail_strategy": "Extract scoped Elementor article text and explicit workplace/deadline text. The observed linked ad expired on 2024-06-16 and must be excluded.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared rel=next links with loop/cap checks; TalentBrew uses declared current/total pages and must match its total count. Static employer pages have no observed pagination; reject missing links unless the verified empty marker remains.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.opticept.se/jobs/"
-    ]
+    ],
+    "index_url": "https://www.opticept.se/jobs/",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 1,
+      "requests": 2
+    }
   },
   {
     "employer": "Intui (formerly IntuiCell)",
     "url": "https://careers.intui.ai/jobs",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "feed",
-    "source_id": null,
-    "discovery_strategy": "Verify the advertised Teamtailor RSS feed and enumerate its items. Also inspect the careers board for delegated recruiter ad links that its native feed may omit.",
-    "detail_strategy": "Use complete RSS descriptions and location namespaces; fetch JobPosting JSON-LD for delegated or incomplete items.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Follow declared feed pagination; inspect listing paging and compare available counts before enabling another employer.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "intui",
+    "discovery_strategy": "Read the advertised full-description RSS feed; follow declared next links with cycle and page-cap checks.",
+    "detail_strategy": "Decode complete descriptions and provider IDs from RSS. Fill missing locations from verified detail metadata when available.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Follow declared feed next links. This covers the provider feed snapshot; compare corporate delegated links before adding a new employer.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://careers.intui.ai/jobs",
       "https://careers.intuicell.com/jobs",
-      "https://www.linkedin.com/posts/intuicell_head-of-ip-intuicell-activity-7373250369184940032-pw2R"
-    ]
+      "https://www.linkedin.com/posts/intuicell_head-of-ip-intuicell-activity-7373250369184940032-pw2R",
+      "https://careers.intui.ai/jobs.rss"
+    ],
+    "index_url": "https://careers.intui.ai/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Repligen",
     "url": "https://www.repligen.com/company/careers",
-    "status": "planned-unverified",
+    "status": "implemented",
     "adapter_family": "workday",
-    "source_id": null,
-    "discovery_strategy": "Resolve tenant and career-site identifiers from the official Workday page. Discover the Lund location facet from the public CXS response, then enumerate by offset with an empty keyword search.",
-    "detail_strategy": "Fetch public CXS detail JSON for full descriptions, stable requisition IDs, application state, dates and all workplace locations.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Enumerate all offset pages and compare totals; reject repeated or prematurely empty pages.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "source_id": "repligen",
+    "discovery_strategy": "Use public CXS JSON to resolve the Lund location facet and enumerate all offsets with an empty keyword query. If configured and Lund has no facet, enumerate the Sweden country facet and verify detail cities.",
+    "detail_strategy": "Fetch full CXS job descriptions, requisition IDs, application state, dates and primary/additional locations.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Check advertised total, duplicate paths and prematurely empty pages; enforce the page cap.",
+    "next_step": "Retain offline regression coverage; investigate partial/failed audits and recheck provider pagination, workplace fields and delegated recruiter links when markup changes.",
     "evidence_urls": [
       "https://www.repligen.com/company/careers",
       "https://repligen.wd108.myworkdayjobs.com/Repligen_Careers",
-      "https://repligen.wd108.myworkdayjobs.com/en-US/Repligen_Careers/job/Lund-Sweden/Quality-Assurance-Specialist-I_R-205"
-    ]
+      "https://repligen.wd108.myworkdayjobs.com/en-US/Repligen_Careers/job/Lund-Sweden/Quality-Assurance-Specialist-I_R-205",
+      "https://repligen.wd108.myworkdayjobs.com/wday/cxs/repligen/Repligen_Careers"
+    ],
+    "index_url": "https://repligen.wd108.myworkdayjobs.com/Repligen_Careers",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "ok",
+    "validation_summary": {
+      "discovered": 1,
+      "indexed": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 3
+    }
   },
   {
     "employer": "RISE Research Institutes of Sweden",
     "url": "https://www.ri.se/sv/om-rise/jobba-hos-oss/lediga-jobb",
-    "status": "planned-unverified",
-    "adapter_family": "corporate-listing",
-    "source_id": null,
-    "discovery_strategy": "Inspect the national vacancy board’s pagination and job links. Enumerate metadata for Lund; do not mistake a thesis listing for a permanent engineering vacancy.",
-    "detail_strategy": "Follow the actual ad/provider link and use structured full descriptions and explicit workplace fields.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "blocked",
+    "adapter_family": "blocked",
+    "source_id": "rise",
+    "discovery_strategy": "Official Swedish page returns a bot challenge and the English page HTTP 403. The readable RISE Varbi portal only exposes thesis expressions of interest, so it cannot establish complete vacancy coverage.",
+    "detail_strategy": "No ad ingestion while the official listing cannot be verified. Keep the source explicitly blocked.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Unverified because the official listing cannot be fetched.",
+    "next_step": "Revalidate the official listing using permitted access or an employer-published public feed/API; implement and verify the missing adapter once complete listing data is available.",
     "evidence_urls": [
       "https://www.ri.se/sv/om-rise/jobba-hos-oss/lediga-jobb",
-      "https://www.ri.se/en/about-rise/work-with-us/open-job-positions"
-    ]
+      "https://www.ri.se/en/about-rise/work-with-us/open-job-positions",
+      "https://ri.varbi.com/",
+      "https://www.ri.se/en/about-rise/career/vacant-positions"
+    ],
+    "index_url": "https://www.ri.se/sv/om-rise/jobba-hos-oss/lediga-jobb",
+    "validated_on": "2026-10-16",
+    "coverage": "blocked",
+    "validation_status": "blocked",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 0
+    }
   },
   {
     "employer": "Schneider Electric",
     "url": "https://careers.se.com/jobs",
-    "status": "planned-unverified",
-    "adapter_family": "dynamic-ats-discovery",
-    "source_id": null,
-    "discovery_strategy": "Inspect the public careers job-search application and its provider requests. Earlier general-board HTTP 403 responses need investigation before enabling; specific ads establish Lund relevance only.",
-    "detail_strategy": "Use provider detail JSON/JSON-LD with requisition IDs and actual location; never treat a blocked search response as zero jobs.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "implemented",
+    "adapter_family": "jibe",
+    "source_id": "schneider-electric",
+    "discovery_strategy": "Page public /api/jobs with location=Lund and read authoritative primary/additional cities; returned results can include country-wide roles.",
+    "detail_strategy": "Combine full description, responsibilities and qualifications from job data; retain requisition ID and public detail URL.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Compare totalCount across pages, including non-default-language records; count alone describes the default language and can undercount.",
+    "next_step": "Keep the three Sweden-only records in location_review until explicit Lund workplace metadata is available; the other 12 Lund ads index normally.",
     "evidence_urls": [
       "https://careers.se.com/jobs",
       "https://careers.se.com/jobs/122804?lang=en-us",
       "https://careers.se.com/jobs/125814?lang=en-us",
-      "https://careers.se.com/jobs/130035?lang=en-us&previousLocale=en-US"
-    ]
+      "https://careers.se.com/jobs/130035?lang=en-us&previousLocale=en-US",
+      "https://careers.se.com/api/jobs"
+    ],
+    "index_url": "https://careers.se.com/jobs",
+    "validated_on": "2026-10-16",
+    "coverage": "provider-snapshot",
+    "validation_status": "partial",
+    "validation_summary": {
+      "discovered": 20,
+      "indexed": 12,
+      "location_unknown": 3,
+      "expired": 0,
+      "requests": 1
+    }
   },
   {
     "employer": "Alligator Bioscience",
     "url": "https://workwithus.alligatorbioscience.com/",
-    "status": "planned-unverified",
-    "adapter_family": "portal-discovery",
-    "source_id": null,
-    "discovery_strategy": "Start from the corporate contact page’s verified recruitment link. Recheck portal availability and discover RSS, JSON-LD or a public listing response before enabling.",
-    "detail_strategy": "Use the verified provider’s full ad data; retain failed-access state until actual listings can be read.",
-    "location_strategy": "Require an explicit Lund workplace from source metadata; a company address or a mention of Lund in the description does not establish workplace. Ambiguity is reported for review.",
-    "pagination_strategy": "Inspect the live listing for pagination, load-more requests or complete-table behaviour; no inferred completeness from a single page.",
-    "next_step": "Inspect a current list response and at least one detail response, validate location and empty/error handling, then add configuration or a provider adapter with regression fixtures.",
+    "status": "blocked",
+    "adapter_family": "blocked",
+    "source_id": "alligator-bioscience",
+    "discovery_strategy": "Official career portal and /jobs fail TLS certificate validation (self-signed certificate). Employer contact page still links to this portal.",
+    "detail_strategy": "No ad ingestion while the official listing cannot be verified. Keep the source explicitly blocked.",
+    "location_strategy": "Require explicit Lund workplace metadata or a labelled Location / Lund, Sweden section in the full advertisement. A headquarters mention is insufficient. Withhold unresolved cities without marking them seen.",
+    "pagination_strategy": "Unverified because the official listing cannot be fetched.",
+    "next_step": "Revalidate the official listing using permitted access or an employer-published public feed/API; implement and verify the missing adapter once complete listing data is available.",
     "evidence_urls": [
       "https://workwithus.alligatorbioscience.com/",
       "https://alligatorbioscience.se/en/contact/"
-    ]
+    ],
+    "index_url": "https://workwithus.alligatorbioscience.com/",
+    "validated_on": "2026-10-16",
+    "coverage": "blocked",
+    "validation_status": "blocked",
+    "validation_summary": {
+      "discovered": 0,
+      "indexed": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "requests": 0
+    }
   }
 ]

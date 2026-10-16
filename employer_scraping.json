@@ -13,6 +13,41 @@
       "location": "Lund"
     },
     {
+      "id": "tetra-pak",
+      "employer": "Tetra Pak",
+      "adapter": "feed",
+      "url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
+      "feed_url": "https://jobs.tetrapak.com/sitemap.xml",
+      "hosts": [
+        "jobs.tetrapak.com"
+      ]
+    },
+    {
+      "id": "alfa-laval",
+      "employer": "Alfa Laval",
+      "url": "https://career.alfalaval.com/jobs/search?query=Lund",
+      "adapter": "html",
+      "hosts": [
+        "career.alfalaval.com"
+      ],
+      "link_pattern": "/jobs/(?!search(?:[/?]|$))[^/?]+",
+      "empty_pattern": "Displaying all\\s*0 entries",
+      "container": {
+        "cls": "block-job-search-results"
+      },
+      "next_pattern": "next_page"
+    },
+    {
+      "id": "region-skane",
+      "employer": "Region Skåne",
+      "url": "https://www.skane.se/jobb-och-utbildning/lediga-jobb/",
+      "adapter": "blocked",
+      "hosts": [
+        "www.skane.se"
+      ],
+      "reason": "Public listing and /lediga-jobb return HTTP 403; access to the official listing is blocked."
+    },
+    {
       "id": "cellavision",
       "employer": "CellaVision",
       "adapter": "feed",
@@ -36,16 +71,6 @@
       ]
     },
     {
-      "id": "tetra-pak",
-      "employer": "Tetra Pak",
-      "adapter": "feed",
-      "url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
-      "feed_url": "https://jobs.tetrapak.com/sitemap.xml",
-      "hosts": [
-        "jobs.tetrapak.com"
-      ]
-    },
-    {
       "id": "ess",
       "employer": "ESS",
       "adapter": "reachmee",
@@ -54,6 +79,474 @@
         "ess.eu",
         "web103.reachmee.com"
       ]
+    },
+    {
+      "id": "sydvatten",
+      "employer": "Sydvatten",
+      "url": "https://ledigajobb.sydvatten.se/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "ledigajobb.sydvatten.se"
+      ],
+      "feed_url": "https://ledigajobb.sydvatten.se/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "kraftringen",
+      "employer": "Kraftringen",
+      "url": "https://www.kraftringen.se/om-oss/karriar/lediga-jobb/",
+      "adapter": "html",
+      "hosts": [
+        "www.kraftringen.se"
+      ],
+      "link_pattern": "ledigt-jobb\\?jobid=",
+      "empty_pattern": "inga lediga",
+      "container": {},
+      "detail_format": "kraftringen"
+    },
+    {
+      "id": "va-syd",
+      "employer": "VA SYD",
+      "url": "https://vasyd.varbi.com/",
+      "adapter": "feed",
+      "hosts": [
+        "vasyd.varbi.com"
+      ],
+      "feed_url": "https://vasyd.varbi.com/what:rssfeed/",
+      "metadata": "varbi"
+    },
+    {
+      "id": "lunds-kommun",
+      "employer": "Lunds kommun",
+      "url": "https://lund.varbi.com/",
+      "adapter": "feed",
+      "hosts": [
+        "lund.varbi.com"
+      ],
+      "feed_url": "https://lund.varbi.com/what:rssfeed/",
+      "metadata": "varbi"
+    },
+    {
+      "id": "hansa-biopharma",
+      "employer": "Hansa Biopharma",
+      "url": "https://career.hansabiopharma.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "career.hansabiopharma.com"
+      ],
+      "feed_url": "https://career.hansabiopharma.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "bioinvent",
+      "employer": "BioInvent",
+      "url": "https://careers.bioinvent.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.bioinvent.com"
+      ],
+      "feed_url": "https://careers.bioinvent.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "vantive",
+      "employer": "Vantive",
+      "url": "https://jobs.vantive.com/location/lund-jobs/47727/2661886-3337385-2693678/4",
+      "adapter": "html",
+      "hosts": [
+        "jobs.vantive.com"
+      ],
+      "link_pattern": "/job/",
+      "empty_pattern": "0 jobs found",
+      "container": {
+        "id": "search-results"
+      }
+    },
+    {
+      "id": "camurus",
+      "employer": "Camurus",
+      "url": "https://www.camurus.com/career/",
+      "adapter": "workspace",
+      "hosts": [
+        "www.camurus.com",
+        "app.workspacerecruit.com"
+      ]
+    },
+    {
+      "id": "clinisys",
+      "employer": "Clinisys",
+      "url": "https://careers.clinisys.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.clinisys.com"
+      ],
+      "feed_url": "https://careers.clinisys.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "arm",
+      "employer": "Arm",
+      "url": "https://careers.arm.com/location/lund-jobs/33099/2661886-3337385-2693678/4",
+      "adapter": "html",
+      "hosts": [
+        "careers.arm.com"
+      ],
+      "link_pattern": "/job/",
+      "empty_pattern": "0 jobs",
+      "container": {
+        "id": "search-results"
+      }
+    },
+    {
+      "id": "ericsson",
+      "employer": "Ericsson",
+      "url": "https://jobs.ericsson.com/careers?location=Lund%2C%20Sweden",
+      "adapter": "eightfold",
+      "hosts": [
+        "jobs.ericsson.com"
+      ],
+      "api_url": "https://jobs.ericsson.com/api/pcsx/search",
+      "domain": "ericsson.com"
+    },
+    {
+      "id": "qlik",
+      "employer": "Qlik",
+      "url": "https://careerhub.qlik.com/careers",
+      "adapter": "eightfold",
+      "hosts": [
+        "careerhub.qlik.com"
+      ],
+      "api_url": "https://careerhub.qlik.com/api/pcsx/search",
+      "domain": "qlik.com"
+    },
+    {
+      "id": "sony",
+      "employer": "Sony",
+      "url": "https://sonyglobal.wd1.myworkdayjobs.com/SonyGlobalCareers",
+      "adapter": "workday",
+      "hosts": [
+        "sonyglobal.wd1.myworkdayjobs.com"
+      ],
+      "api_url": "https://sonyglobal.wd1.myworkdayjobs.com/wday/cxs/sonyglobal/SonyGlobalCareers",
+      "location": "Lund",
+      "fallback_country": "Sweden"
+    },
+    {
+      "id": "dassault-systemes",
+      "employer": "Dassault Systèmes",
+      "url": "https://www.3ds.com/careers/jobs",
+      "adapter": "dassault",
+      "hosts": [
+        "www.3ds.com"
+      ],
+      "api_url": "https://www.3ds.com/apisearch"
+    },
+    {
+      "id": "nordic-semiconductor",
+      "employer": "Nordic Semiconductor",
+      "url": "https://careers.nordicsemi.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.nordicsemi.com"
+      ],
+      "feed_url": "https://careers.nordicsemi.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "voyado",
+      "employer": "Voyado",
+      "url": "https://careers.voyado.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.voyado.com"
+      ],
+      "feed_url": "https://careers.voyado.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "etteplan",
+      "employer": "Etteplan",
+      "url": "https://www.etteplan.com/careers/open-positions/apply-now/",
+      "adapter": "etteplan",
+      "hosts": [
+        "www.etteplan.com",
+        "emp.jobylon.com"
+      ]
+    },
+    {
+      "id": "afry",
+      "employer": "AFRY",
+      "url": "https://afry.com/sv/karriar/lediga-jobb",
+      "adapter": "afry",
+      "hosts": [
+        "afry.com"
+      ],
+      "api_url": "https://afry.com/sv/api/afp-hr-smartrecruiteres-job-list",
+      "detail_format": "afry"
+    },
+    {
+      "id": "combitech",
+      "employer": "Combitech",
+      "url": "https://www.combitech.se/lediga-jobb/",
+      "adapter": "combitech",
+      "hosts": [
+        "www.combitech.se"
+      ],
+      "link_pattern": "job_posting-\\d+-\\d+",
+      "empty_pattern": "Inga lediga",
+      "container": {
+        "id": "job-list"
+      },
+      "detail_format": "combitech"
+    },
+    {
+      "id": "dokumentera",
+      "employer": "Dokumentera",
+      "url": "https://www.dokumentera.se/jobba-hos-oss",
+      "adapter": "dokumentera",
+      "hosts": [
+        "www.dokumentera.se",
+        "admin.dokumentera.se"
+      ],
+      "api_url": "https://admin.dokumentera.se/wp-json/wp/v2/jobs",
+      "location_icon": 666
+    },
+    {
+      "id": "modelon",
+      "employer": "Modelon",
+      "url": "https://modelon.careers.haileyhr.app/",
+      "adapter": "hailey",
+      "hosts": [
+        "modelon.careers.haileyhr.app"
+      ]
+    },
+    {
+      "id": "lime-technologies",
+      "employer": "Lime Technologies",
+      "url": "https://jobs.lime-technologies.com/open-positions/",
+      "adapter": "html",
+      "hosts": [
+        "jobs.lime-technologies.com",
+        "emp.jobylon.com",
+        "lime-tech.jobs.personio.de"
+      ],
+      "link_pattern": "(?:emp\\.jobylon\\.com/jobs/|lime-tech\\.jobs\\.personio\\.de/job/)",
+      "empty_pattern": "no open positions",
+      "container": {}
+    },
+    {
+      "id": "avensia",
+      "employer": "Avensia",
+      "url": "https://career.avensia.com/locations/lund",
+      "adapter": "feed",
+      "hosts": [
+        "career.avensia.com"
+      ],
+      "feed_url": "https://career.avensia.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "consafe-logistics",
+      "employer": "Consafe Logistics",
+      "url": "https://careers.consafelogistics.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.consafelogistics.com"
+      ],
+      "feed_url": "https://careers.consafelogistics.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "axiell",
+      "employer": "Axiell",
+      "url": "https://careers.axiell.com/",
+      "adapter": "workspace",
+      "hosts": [
+        "careers.axiell.com",
+        "app.workspacerecruit.com"
+      ]
+    },
+    {
+      "id": "incoax",
+      "employer": "InCoax",
+      "url": "https://www.incoax.com/incoax-career/",
+      "adapter": "html",
+      "hosts": [
+        "www.incoax.com"
+      ],
+      "link_pattern": "/jobs?/[^#]+",
+      "empty_pattern": "Open Applications",
+      "container": {}
+    },
+    {
+      "id": "flatfrog",
+      "employer": "FlatFrog",
+      "url": "https://www.flatfrog.com/careers",
+      "adapter": "html",
+      "hosts": [
+        "www.flatfrog.com"
+      ],
+      "link_pattern": "/jobs?/[^#]+",
+      "empty_pattern": "We currently have no open positions",
+      "container": {}
+    },
+    {
+      "id": "qlucore",
+      "employer": "Qlucore",
+      "url": "https://qlucore.com/vacancies",
+      "adapter": "html",
+      "hosts": [
+        "qlucore.com"
+      ],
+      "link_pattern": "/vacancies/.+",
+      "empty_pattern": "We have no vacancies at the moment",
+      "container": {}
+    },
+    {
+      "id": "bonesupport",
+      "employer": "BONESUPPORT",
+      "url": "https://www.bonesupport.com/en/careers",
+      "adapter": "html",
+      "hosts": [
+        "www.bonesupport.com",
+        "www.kingbishop.com"
+      ],
+      "link_pattern": "kingbishop\\.com/job/",
+      "empty_pattern": "no vacancies",
+      "container": {}
+    },
+    {
+      "id": "probi",
+      "employer": "Probi",
+      "url": "https://probi.bamboohr.com/careers",
+      "adapter": "bamboohr",
+      "hosts": [
+        "probi.bamboohr.com"
+      ],
+      "api_url": "https://probi.bamboohr.com/careers/list"
+    },
+    {
+      "id": "sigma-technology",
+      "employer": "Sigma Technology",
+      "url": "https://sigmatechnology.com/open-positions/",
+      "adapter": "sigma",
+      "hosts": [
+        "sigmatechnology.com"
+      ],
+      "api_url": "https://sigmatechnology.com/wp-json/sigma_profiler/positions"
+    },
+    {
+      "id": "prevas-test-measurement",
+      "employer": "Prevas Test & Measurement (formerly DVel)",
+      "url": "https://prevastm.teamtailor.com/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "prevastm.teamtailor.com"
+      ],
+      "feed_url": "https://prevastm.teamtailor.com/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "svep",
+      "employer": "Svep Design Center",
+      "url": "https://careers.svep.se/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.svep.se"
+      ],
+      "feed_url": "https://careers.svep.se/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "plantvision",
+      "employer": "Plantvision",
+      "url": "https://career.plantvision.se/jobs?location_id=2506",
+      "adapter": "feed",
+      "hosts": [
+        "career.plantvision.se"
+      ],
+      "feed_url": "https://career.plantvision.se/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "anoxkaldnes",
+      "employer": "AnoxKaldnes / Veolia Water Technologies",
+      "url": "https://jobs.veolia.com/en/search-jobs/Lund",
+      "adapter": "html",
+      "hosts": [
+        "jobs.veolia.com"
+      ],
+      "link_pattern": "/job/",
+      "empty_pattern": "0 results",
+      "container": {
+        "id": "search-results"
+      }
+    },
+    {
+      "id": "opticept",
+      "employer": "OptiCept Technologies",
+      "url": "https://www.opticept.se/jobs/",
+      "adapter": "html",
+      "hosts": [
+        "www.opticept.se"
+      ],
+      "link_pattern": "/job-[^/]+/",
+      "empty_pattern": "no open positions",
+      "container": {},
+      "detail_format": "opticept"
+    },
+    {
+      "id": "intui",
+      "employer": "Intui (formerly IntuiCell)",
+      "url": "https://careers.intui.ai/jobs",
+      "adapter": "feed",
+      "hosts": [
+        "careers.intui.ai"
+      ],
+      "feed_url": "https://careers.intui.ai/jobs.rss",
+      "metadata": ""
+    },
+    {
+      "id": "repligen",
+      "employer": "Repligen",
+      "url": "https://repligen.wd108.myworkdayjobs.com/Repligen_Careers",
+      "adapter": "workday",
+      "hosts": [
+        "repligen.wd108.myworkdayjobs.com"
+      ],
+      "api_url": "https://repligen.wd108.myworkdayjobs.com/wday/cxs/repligen/Repligen_Careers",
+      "location": "Lund",
+      "fallback_country": "Sweden"
+    },
+    {
+      "id": "rise",
+      "employer": "RISE Research Institutes of Sweden",
+      "url": "https://www.ri.se/sv/om-rise/jobba-hos-oss/lediga-jobb",
+      "adapter": "blocked",
+      "hosts": [
+        "www.ri.se"
+      ],
+      "reason": "Official Swedish page returns a bot challenge and the English page HTTP 403. The readable RISE Varbi portal only exposes thesis expressions of interest, so it cannot establish complete vacancy coverage."
+    },
+    {
+      "id": "schneider-electric",
+      "employer": "Schneider Electric",
+      "url": "https://careers.se.com/jobs",
+      "adapter": "jibe",
+      "hosts": [
+        "careers.se.com"
+      ],
+      "api_url": "https://careers.se.com/api/jobs"
+    },
+    {
+      "id": "alligator-bioscience",
+      "employer": "Alligator Bioscience",
+      "url": "https://workwithus.alligatorbioscience.com/",
+      "adapter": "blocked",
+      "hosts": [
+        "workwithus.alligatorbioscience.com"
+      ],
+      "reason": "Official career portal and /jobs fail TLS certificate validation (self-signed certificate). Employer contact page still links to this portal."
     }
   ]
 }

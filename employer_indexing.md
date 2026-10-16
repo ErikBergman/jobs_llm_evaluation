@@ -1,36 +1,58 @@
-# Employer indexing pilot
+# Employer job indexing
 
-On 2026-10-16 the five-source pilot indexed 116 advertisements with an explicit Lund workplace. A second pass against the same memory indexed zero new ads and recognised all 116 previously stored ads. These are discovered advertisements, not 116 profile matches. The local prefilter passed 102 and rejected 14; no OpenAI calls or Telegram messages were made during validation. The complete 116-ad batch also passed through the existing free mock classifier successfully. The source snapshot includes student/research opportunities and two Tetra Pak expressions of interest; these are retained as advertisements for the existing matching stage to assess, rather than presented as confirmed suitable vacancies.
+All 48 employers in the Lund catalogue now have an indexing configuration and an individual strategy. Live validation on 2026-10-16 indexed **261 ads with an explicit Lund workplace**, using 197 public HTTP requests. These are advertisements for the existing matcher to assess, not confirmed profile matches. The prefilter passed 236 and rejected 25. No OpenAI evaluation or notifications were used during validation.
 
-[employer_indexing_strategies.json](employer_indexing_strategies.json) gives an individual strategy for every one of the 48 catalogue entries. Five are `implemented-pilot`; the other 43 are `planned-unverified`. Provider guesses and future discovery steps are not active configuration. [employer_scraping.json](employer_scraping.json) contains only the five tested sources.
+The run completed cleanly for 44 sources. Schneider Electric produced 12 Lund ads and withheld three country-wide ads whose metadata specifies only Sweden. Region Skåne, RISE and Alligator are explicitly blocked. A successful rerun recognised the stored ads without adding duplicates; see [employer_indexing_validation.json](employer_indexing_validation.json) for exact repeat counts and current source diagnostics.
 
-## The five strategies and observed results
+- [employer_scraping.json](employer_scraping.json): all 48 configured sources, including explicit blocked-source reasons.
+- [employer_indexing_strategies.json](employer_indexing_strategies.json): discovery, full-description, workplace and pagination strategy for every employer.
+- [employer_jobs.py](employer_jobs.py): standard-library importer into the existing LinkedIn matcher's waiting room.
 
-| Employer | Recruitment platform | Discovery and detail strategy | Ads discovered | Lund ads indexed |
-| --- | --- | --- | ---: | ---: |
-| Axis | Workday | Discover the Lund location facet in public CXS JSON, enumerate offset pages with no keyword restriction, then fetch each job's detail JSON. | 29 | 29 |
-| CellaVision | Teamtailor | RSS contains the native ad. Also follow delegated recruiter links on the official board and read their JobPosting JSON-LD. | 3 | 3 |
-| Lund University / MAX IV | Varbi | Full-description RSS plus a join to the listing's workplace/deadline table using native job ID, independent of URL language. | 85 | 79 |
-| Tetra Pak | SuccessFactors | `sitemap.xml` is an RSS job feed, including full descriptions, Google-namespace location and expiry fields. It is not a conventional URL-only sitemap. | 245 | 5 |
-| ESS | ReachMee | Read the public bootstrap script as data, resolve its iframe board, parse job rows and scoped detail HTML. | 1 | 0 |
+## Shared adapters and verified differences
 
-ESS's sole listed ad was in Denmark. Its description mentions the Lund facility, which must not cause the ad to pass a Lund workplace filter. Six university ads and 240 Tetra Pak ads were outside Lund. No pilot source hit the 200-ad validation limit or its pagination cap. These are observations of the provider responses at the recorded validation time, not a guarantee of every advertisement across every recruitment channel.
+| Adapter | Employers | Strategy |
+| --- | ---: | --- |
+| RSS | 17 | Full descriptions, stable provider IDs and location namespaces. Varbi joins workplace/deadline table cells by native ID; CellaVision also follows delegated recruiters. |
+| Workday CXS | 3 | Resolve Lund facets and page JSON. Sony currently has only a Malmö role: its Sweden country facet is a discovery fallback, with detail cities still checked. |
+| Declarative HTML listings | 11 | Scoped job links and JSON-LD, with explicit empty markers and bounded pagination. Includes Clinch, TalentBrew, Lime's mixed providers and three small careers-page monitors. |
+| Workspace Recruit | 2 | Parse literal portal recruitment arrays, then scoped public advertisement HTML. Camurus and Axiell share this adapter. |
+| Eightfold | 2 | Ericsson and Qlik public search JSON, followed by full JobPosting JSON-LD. Verify actual cities because search results can include nearby/remote roles. |
+| Other structured/platform adapters | 10 | ReachMee, Dassault, Etteplan, AFRY, Combitech, Dokumentera, Hailey, BambooHR, Sigma Profiler and Jibe. |
+| Blocked | 3 | Retain actionable diagnostics; do not report a successful zero-ad result. |
 
-The full discovery pass used 42 public HTTP requests. The machine-readable run summaries are in [employer_indexing_validation.json](employer_indexing_validation.json). Full public advertisements used for live validation remain in temporary local results, rather than in the repository.
+There are 15 active discovery adapter types, rather than 48 unrelated scrapers. Feed and Workday configuration alone cover 20 employers. All adapters share HTTP handling, source isolation, allowed hosts, dates, workplace checks, canonical URLs, persistent deduplication, description cleanup, requirements extraction, prefiltering and output schema.
 
-## What has been streamlined
+The additional platforms exposed several important differences:
 
-Five different recruitment platforms needed three discovery adapters: RSS, Workday JSON and ReachMee HTML. Three of the five employers share the feed reader. A small Varbi metadata join and CellaVision's delegated-link discovery handle differences the feeds alone do not cover. The ReachMee adapter uses narrowly scoped job markup; it does not scrape a whole corporate page as an advertisement.
+- **Modelon / Hailey:** the full Markdown is a UTF-8 byte-length-delimited Next Flight text record, sometimes split across several script calls. Reassemble the data stream; do not execute scripts or rely on visible text alone.
+- **Etteplan:** deduplicate repeated positions in `__NEXT_DATA__`, retain all listed workplaces and deadlines, then fetch full Jobylon ads.
+- **Lime:** the corporate board mixes Jobylon and Personio. Some Personio details lack JobPosting JSON-LD, so a scoped title, description and location-component fallback is necessary.
+- **Schneider / Jibe:** retain primary and additional cities; combine full description, responsibilities and qualifications. Paginate against `totalCount`, including non-default-language records, rather than the default-language `count`.
+- **AFRY:** the official job cache supplies full discovery metadata; details use the scoped `advert--body` HTML. Skip expired metadata before fetching a stale detail. A representative active non-Lund detail was also checked.
+- **Probi / BambooHR:** `/careers/<id>` returns a JavaScript shell; `/careers/<id>/detail` supplies the full public JSON. A Redmond ad was checked because no Lund ad was listed.
+- **Dassault:** enumerate English career cards to avoid per-language duplicates; use its detail API for full description/qualifications. Card summaries and the page's short JSON-LD description are insufficient. No Lund jobs appeared in the complete 694-card snapshot; a representative non-Lund full detail was checked separately.
+- **Dokumentera:** resolve the Next page's job IDs through public WordPress REST, then read scoped Next detail blocks. One stale unpublished/deleted ID is absent from public REST. All five published positions specify Stockholm.
+- **Kraftringen and Combitech:** extract each ad's own city/deadline fields; corporate addresses and navigation are excluded from the job description.
+- **OptiCept:** the linked Field Service Engineer ad explicitly expired on 2024-06-16. It must not enter the waiting room merely because the link remains live.
 
-All adapters share HTTP handling, source isolation, allowed-host redirects, date and workplace checks, description cleanup, stable job identity, result-memory checks, requirements extraction, prefiltering and output format. Of the 116 ads, 85 descriptions came from RSS, 29 from Workday JSON and two from delegated JobPosting JSON-LD. The existing requirements extractor found requirement sections in 94 ads and retained the full description for the remaining 22.
+This substantially reduces per-employer work, but unfamiliar providers still require inspecting listing, detail, pagination, locations and empty/error states. The HTML adapter is configurable, not a claim that arbitrary HTML can be scraped reliably without verification.
 
-This is a useful reduction in per-employer work. It is not a universal HTML scraper. The next employers on a proven platform should mostly need verified configuration and fixtures; an unfamiliar ATS still needs inspection of its listing, detail, pagination and empty-state behaviour. The remaining strategy file describes those investigations individually.
+## Empty boards, monitors and access limitations
 
-## Using it alongside LinkedIn
+BioInvent, Vantive, Qlik, Svep and Intui returned explicit empty feeds or listing states. Other employers returned jobs outside Lund; these are counted separately from empty boards. FlatFrog and Qlucore are monitored through explicit no-vacancies messages. InCoax currently offers a standing application form; it is monitored for discrete ads rather than emitted as a current vacancy. Unsupported future markup triggers a source failure for investigation.
 
-Use Python 3.12, matching the existing GitHub Actions runtime. The employer importer uses the standard library and the existing local parser/prefilter; it adds no package dependencies.
+| Source | Current limitation | Next action |
+| --- | --- | --- |
+| Region Skåne | Both supplied and alternate official listings return HTTP 403. | Verify permitted browser access or an employer-published feed/API before implementing the remaining listing parser. |
+| RISE | Official Swedish page returns a bot challenge; English page returns HTTP 403. The RISE Varbi portal exposes only thesis expressions of interest and cannot establish complete vacancy coverage. | Recover access to the complete official vacancy list; do not substitute the limited portal silently. |
+| Alligator Bioscience | Official career portal and `/jobs` fail TLS certificate validation; the employer contact page still links there. | Recheck when the portal certificate is repaired or an official replacement is published. |
+| Schneider Electric | Three ads have Sweden-only metadata. | Keep them in `location_review`; ingest only after an explicit Lund workplace is available. |
 
-Run the scrapers against the same result root and waiting room:
+These conditions are recorded in configuration, strategies and validation. No certificate checks or bot challenges are bypassed. Blocked entries deliberately make an all-source CLI run return nonzero, while preserving healthy jobs. Remove the blockage only after the source has been reverified; it is not a transient empty state.
+
+## Running alongside LinkedIn
+
+Use the project's Python 3.12 runtime. No new package dependencies are required. Run both importers against the same result root:
 
 ```bash
 python3 linkedin_guest_jobs.py --results-root runtime_results --results-bucket waiting_room --card-limit 100 --detail-limit 100 --max-pages 10
@@ -38,49 +60,39 @@ python3 employer_jobs.py --results-root runtime_results --limit 25
 python3 match_jobs.py --waiting-room --output-root runtime_results --matcher mock
 ```
 
-The final command demonstrates the existing free mock matcher. Use the existing OpenAI matcher configuration when you intend to evaluate against the private candidate profile. An offline integration test mixes employer and LinkedIn records in the same waiting room and runs the existing classifier without changing `match_jobs.py`.
+The last command demonstrates compatibility using the free mock matcher. Use the existing OpenAI matcher configuration for actual candidate-profile evaluation. Source failures return nonzero without discarding successful ads, so orchestration should retain the source failure and still allow healthy waiting-room inputs to be processed.
 
-The scheduled workflow has not been changed or deployed in this pilot. To schedule these sources, run the employer command after scraping LinkedIn and before the existing waiting-room classification, using the same runtime result root and `job_matching.json` path. Source failures return nonzero while preserving successfully extracted ads and their diagnostics; orchestration should report that source failure while still allowing healthy inputs to be classified.
+The existing scheduled workflow has not been changed. Scheduling requires placing the employer command after LinkedIn scraping and before waiting-room classification, with the same results root and matching configuration. The all-source command currently returns nonzero for the three documented blocks and Schneider's unresolved locations; the diagnostics explain why.
 
-Select sources individually with repeated `--source` flags, for example:
+Select individual sources with repeated flags:
 
 ```bash
-python3 employer_jobs.py --source axis --source cellavision --results-root runtime_results --limit 10
+python3 employer_jobs.py --source axis --source camurus --source modelon --results-root runtime_results --limit 25
 ```
 
-The default is a maximum of 25 new ads per source per invocation, with a one-second request interval. The audit's `selection_truncated` flag indicates that more candidates remained. Later invocations skip stored records and can continue through the current source snapshot. A large first-time import should use an explicit higher limit, as in the bounded 200-per-source validation. Feeds are provider snapshots: increasing this cap does not recover ads a provider has already removed.
+The default is 25 new Lund ads per source, 20 discovery pages, and a one-second request interval. `selection_truncated` flags remaining candidates when the per-source limit is reached; subsequent invocations skip stored records and continue through the current snapshot. The complete validation used `--limit 1000 --max-pages 50 --request-delay 1`, with no truncation. Feeds represent provider snapshots; larger caps cannot recover removed advertisements.
 
-Use `--matching-config` as with the LinkedIn scraper. If omitted, a local `job_matching.json` is picked up when present. Existing keyword and metadata-based location exclusions remain in effect after the employer importer verifies a Lund workplace.
+`--matching-config` uses the same matching/prefilter configuration as LinkedIn. A local `job_matching.json` is used automatically when present.
 
-## Normalised records and indexing rules
+## Records, identity and failure handling
 
-The importer writes `waiting_room/<timestamp>/employer_jobs.json`, an array compatible with the existing matcher. Records carry `job_id`, `title`, `company`, `location`, `url`, full `description`, requirement text and prefilter fields, plus source provenance and extraction method. IDs are namespaced as `employer:<source-id>:<native-id>` so an employer requisition cannot collide with a numeric LinkedIn ID.
+Output is an array in `waiting_room/<timestamp>/employer_jobs.json`, with the existing job fields plus source provenance and extraction method. IDs use `employer:<source-id>:<native-id>` to avoid collisions with numeric LinkedIn IDs. `employer_jobs_metadata.json` contains per-source counts, errors and location-review records; the waiting-room loader ignores that metadata filename.
 
-Repeat indexing suppresses records with the same stable ID or exact canonical ad URL anywhere in result memory, including queued and classified files. Only tracking parameters and fragments are removed; identity-bearing query parameters such as ReachMee's `job_id` remain. Error diagnostics contain no `job_id` fields, so the existing recursive seen-ID loader cannot accidentally mark failed ads as indexed.
+Stored IDs and exact canonical URLs are checked across queued and classified result files. Tracking parameters and fragments are removed; identity-bearing parameters remain. Error/review records contain no `job_id`, so unsuccessful ads cannot poison the existing recursive seen-ID memory. Missing full descriptions, location ambiguity, changed schemas and incomplete pagination remain visible and eligible for retry.
 
-Workplace comes from provider fields, feed location metadata or the Varbi workplace table. For ESS country-only metadata, a narrowly matched explicit sentence such as “The position is based in Lund” can supply the city; the record identifies that extraction method. A general description mentioning Lund is insufficient. Ambiguous locations are withheld and listed in `location_review` for investigation, not silently marked as seen. Expired ads and Workday ads that cannot be applied to are excluded where that metadata is available.
+Workplace must come from explicit provider metadata, verified table cells or a labelled Location / Lund, Sweden section within the full ad. ReachMee also accepts narrowly matched explicit workplace sentences. A general headquarters/facility mention does not qualify. Expired/inactive ads and HTML detail URLs returning HTTP 404/410 are excluded; other HTTP errors remain failures. Unknown expiry formats are errors rather than guessed dates.
 
-This follows the app's existing seen-once memory policy: edits to an already stored advertisement are not automatically re-evaluated. A future refresh policy should compare provider modification dates or content hashes.
+The HTTP client limits response size and request rate, follows only configured HTTPS hosts, retains ordinary cookies, retries temporary failures and honours short `Retry-After` values. It does not execute downloaded scripts or submit application/contact forms. New external recruitment hosts require explicit configuration after verification.
 
-Cross-posting on LinkedIn and an employer site can still produce two records when their URLs and IDs differ. This pilot deliberately does not collapse jobs solely by title and company: separate requisitions can share both. A later improvement should extract employer application URLs/requisition IDs from LinkedIn and merge only strong identity matches, preserving both source labels.
-
-## Failures, pagination and maintenance
-
-Each source has its own audit in `employer_jobs_metadata.json`. A malformed feed, HTTP error, missing expected container, incomplete pagination, repeated Workday page or schema change is a failed/partial source, not a healthy empty board. Valid empty feeds remain healthy. Successfully parsed ads from other sources are preserved. This metadata filename is excluded by the existing waiting-room job loader.
-
-The HTTP client limits response size and request rate, follows only configured public HTTPS hosts, retains ordinary session cookies and retries temporary server/rate-limit responses. It honours short `Retry-After` values and defers rather than immediately retrying a server-requested wait over 30 seconds. It does not execute downloaded scripts or submit application/contact forms. External recruitment hosts must be added explicitly after verification.
-
-Workday pagination checks its advertised total and rejects missing/repeated pages. RSS follows declared next links with loop/cap detection. The inspected ReachMee board renders its current set as a complete table; another ReachMee customer must be checked for different pagination before reuse. Unusual RSS truncation or a provider-specific alternative feed also needs per-employer validation; a well-formed feed alone does not prove all recruitment channels are covered.
-
-For the next batch, prioritise the other identified Workday, Varbi and Teamtailor sources. Confirm their endpoints, location metadata and any external recruiter cards before adding configuration. For every other catalogue entry, follow its recorded discovery strategy and try public feeds or structured detail data before introducing another HTML adapter.
+Repeat indexing follows the app's existing seen-once policy: edited ads are not automatically reevaluated. Cross-posted LinkedIn and employer ads can still produce separate records when IDs and URLs differ. A future merge should use employer application URLs/requisition IDs; title/company alone is not sufficient evidence of identity.
 
 ## Verification
 
 ```bash
-python3 -m unittest tests.test_employer_jobs
+python3 -m unittest tests.test_employer_jobs tests.test_employer_platforms
 python3 test_all.py
 ```
 
-All 129 tests passed on Python 3.12.14, including the 17 added offline tests. These new tests use synthetic examples preserving structures observed on the live providers. They cover all five source configurations, full-description/requirements extraction, delegated ads, workplace-versus-company mentions, expired ads, stable IDs and canonical URLs, repeated indexing, mixed LinkedIn/employer classification, pagination failure, source isolation, allowed hosts and rate-limit handling.
+All 156 tests pass under Python 3.12, including 27 additional platform tests and the original 17 employer tests. Synthetic fixtures retain observed provider structures without saving full public advertisements in the repository. Coverage includes UTF-8 Flight chunks, provider pagination/count failures, mixed language totals, full detail extraction, metadata-only expiry, empty/error distinctions, location exclusions, country fallback, blocked sources, stable IDs and mixed employer/LinkedIn waiting-room classification.
 
-The Mac's default Python 3.9 can run the new tests and live importer, but three pre-existing LinkedIn HTTP-error fixture tests fail there. Use the project's Python 3.12 runtime for the full suite; the existing tests were left unchanged.
+The complete live batch was also passed through the existing free mock classifier in a separate temporary result root. See the validation JSON for the processed count and repeat-run evidence. Full public advertisements remain in temporary local results. The repository contains configuration, strategies, tests and concise audits.

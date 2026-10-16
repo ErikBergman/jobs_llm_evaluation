@@ -33,6 +33,12 @@ class SourceError(ValueError):
     """A source failed validation; never interpret this as an empty job board."""
 
 
+class HTTPSourceError(SourceError):
+    def __init__(self, code, url):
+        self.code = code
+        super().__init__(f'HTTP {code}: {url}')
+
+
 @dataclass
 class Node:
     tag: str
@@ -97,6 +103,9 @@ def clean(value):
 
 def description_fragment(value):
     value = str(value or "")
+    # Clinch and Eightfold sometimes double-encode tags/newlines inside JSON.
+    value = re.sub(r"\\u(003[cCeE]|0026)", lambda m: chr(int(m.group(1), 16)), value)
+    value = value.replace(r"\n", "\n")
     # Feeds and JSON-LD can encode HTML once or twice.
     for _ in range(2):
         decoded = unescape(value)
@@ -125,8 +134,9 @@ def native_id(url, fallback=""):
         match = re.search(pattern, url, re.I)
         if match:
             return match.group(1)
-    query = parse_qs(urlsplit(url).query)
-    return (query.get("job_id") or [fallback or hashlib.sha256(canonical_url(url).encode()).hexdigest()[:20]])[0]
+    query = {k.lower(): v for k, v in parse_qs(urlsplit(url).query).items()}
+    return (query.get("job_id") or query.get("jobid") or query.get("jobbid") or
+            [fallback or hashlib.sha256(canonical_url(url).encode()).hexdigest()[:20]])[0]
 
 
 def iso_date(value):
@@ -198,7 +208,7 @@ class Client:
                     return raw.decode(response.headers.get_content_charset() or "utf-8", errors="strict")
             except HTTPError as exc:
                 if exc.code not in {429, 500, 502, 503, 504} or attempt == 2:
-                    raise SourceError(f"HTTP {exc.code}: {url}") from exc
+                    raise HTTPSourceError(exc.code, url) from exc
                 retry = exc.headers.get("Retry-After", "")
                 try:
                     seconds = float(retry)
@@ -291,7 +301,7 @@ def discover_feed(source, client, max_pages, page_size):
         board = client.get(source["url"])
     if source.get("metadata") == "varbi":
         metadata = varbi_metadata(board)
-        if not metadata:
+        if not metadata and not re.search(r"pos-table|positions|lediga tjänster|lediga jobb", board, re.I):
             raise SourceError("Varbi location table is missing; refusing to infer city from employer name")
     jobs = {}
     feed_url = source["feed_url"]
@@ -354,6 +364,25 @@ def discover_workday(source, client, max_pages, page_size):
                 return nested
         return {}
     facets = location_facets(bootstrap.get("facets", []))
+    if not facets and source.get("fallback_country"):
+        def countries(value):
+            if isinstance(value, dict):
+                if value.get("facetParameter") == "locationCountry":
+                    return [v["id"] for v in value.get("values", [])
+                            if v.get("descriptor") == source["fallback_country"] and v.get("id")]
+                for child in value.values():
+                    found = countries(child)
+                    if found:
+                        return found
+            elif isinstance(value, list):
+                for child in value:
+                    found = countries(child)
+                    if found:
+                        return found
+            return []
+        country_ids = countries(bootstrap.get("facets", []))
+        # Country is only a discovery fallback. Detail cities still decide inclusion.
+        facets = {"locationCountry": country_ids} if country_ids else {}
     if not facets:
         raise SourceError("Workday Lund location facet missing; keyword search is not a geography filter")
     jobs = {}
@@ -415,10 +444,350 @@ def discover_reachmee(source, client, max_pages, page_size):
     return jobs
 
 
-DISCOVERERS = {"feed": discover_feed, "workday": discover_workday, "reachmee": discover_reachmee}
+def objects(value):
+    """Walk data only: no evaluation of employer JavaScript."""
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from objects(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from objects(child)
+
+
+def embedded_json(html, element_id):
+    node = next(Document(html).root.find('script', id=element_id), None)
+    if node is None:
+        raise SourceError(f'Missing embedded data: {element_id}')
+    return json.loads(''.join(x for x in node.children if isinstance(x, str)))
+
+
+def flight_chunks(html):
+    for match in re.finditer(r'self\.__next_f\.push\(', html):
+        try:
+            value, _ = json.JSONDecoder().raw_decode(html[match.end():])
+        except ValueError:
+            continue
+        if isinstance(value, list) and len(value) == 2 and value[0] == 1 and isinstance(value[1], str):
+            yield value[1]
+
+
+def flight_texts(html):
+    # Flight T records declare UTF-8 byte lengths and may span several push calls.
+    stream = ''.join(flight_chunks(html)).encode('utf-8')
+    for match in re.finditer(rb'(?:^|\n)[0-9a-f]+:T([0-9a-f]+),', stream):
+        size = int(match[1], 16)
+        text = stream[match.end():match.end() + size]
+        if len(text) != size:
+            raise SourceError('Truncated Hailey Flight text record')
+        yield text.decode('utf-8')
+
+
+def discover_workspace(source, client, max_pages, page_size):
+    html = client.get(source['url'])
+    scripts = [urljoin(source['url'], n.attrs.get('src', '')) for n in Document(html).root.find('script')
+               if '/api/publish/portal/js/' in n.attrs.get('src', '')]
+    if len(scripts) != 1:
+        raise SourceError('Workspace Recruit portal script missing or ambiguous')
+    script = client.get(scripts[0])
+    match = re.search(r'\bconst\s+recruitments\s*=\s*', script)
+    if not match:
+        raise SourceError('Workspace Recruit recruitment array missing')
+    records, _ = json.JSONDecoder().raw_decode(script[match.end():])
+    if not isinstance(records, list):
+        raise SourceError('Workspace Recruit schema changed')
+    return [RawJob(str(r['id']), f"https://app.workspacerecruit.com/api/v1/ad/{r['id']}",
+                   clean(r['title']), clean(r.get('city') or r.get('country')), valid_through=r.get('lastDate', ''),
+                   method='workspace') for r in records]
+
+
+def discover_eightfold(source, client, max_pages, page_size):
+    jobs = {}
+    for page in range(max_pages):
+        url = source['api_url'] + '?' + urlencode(dict(domain=source['domain'], query='', location='Lund',
+                                                       start=len(jobs), num=page_size))
+        response = json.loads(client.get(url))
+        data = response.get('data', {})
+        if response.get('status') != 200 or not isinstance(data.get('positions'), list) or not isinstance(data.get('count'), int):
+            raise SourceError('Eightfold search schema changed')
+        rows = data['positions']
+        for r in rows:
+            key = str(r['id'])
+            if key in jobs:
+                raise SourceError('Eightfold repeated pagination')
+            url = urljoin(source['url'], r['positionUrl'])
+            jobs[key] = RawJob(key, url, clean(r['name']), '; '.join(r.get('locations', [])), method='eightfold-jsonld')
+        if len(jobs) >= data['count']:
+            return list(jobs.values())
+        if not rows:
+            raise SourceError('Eightfold stopped before advertised total')
+    raise SourceError('Eightfold pagination cap reached')
+
+
+def discover_jibe(source, client, max_pages, page_size):
+    jobs = {}
+    for page in range(1, max_pages + 1):
+        data = json.loads(client.get(source['api_url'] + '?' + urlencode(dict(location='Lund', page=page, limit=page_size))))
+        if not isinstance(data.get('jobs'), list) or not isinstance(data.get('totalCount'), int):
+            raise SourceError('Jibe job search schema changed')
+        for row in data['jobs']:
+            r = row['data']
+            key = str(r['slug'])
+            if key in jobs:
+                raise SourceError('Jibe repeated pagination')
+            location = '; '.join(dict.fromkeys(clean(loc.get('city')) for loc in [r] + r.get('additional_locations', []) if loc.get('city')))
+            # Keep all substantive fields: some tenants divide the ad among three HTML fields.
+            description = '\n'.join(dict.fromkeys(r.get(k, '') for k in ['description', 'responsibilities', 'qualifications'] if r.get(k)))
+            jobs[key] = RawJob(key, urljoin(source['url'], '/jobs/' + key), clean(r['title']), location,
+                               description, iso_date(r.get('create_date')), method='jibe-json',
+                               active=str(r.get('applyable', 'true')).lower() != 'false')
+        # count describes the default language; jobs can include other languages too.
+        if len(jobs) >= data['totalCount']:
+            return list(jobs.values())
+        if not data['jobs']:
+            raise SourceError('Jibe stopped before advertised total')
+    raise SourceError('Jibe pagination cap reached')
+
+
+def discover_bamboohr(source, client, max_pages, page_size):
+    data = json.loads(client.get(source['api_url']))
+    if not isinstance(data.get('result'), list) or data.get('meta', {}).get('totalCount') != len(data['result']):
+        raise SourceError('BambooHR list schema or completeness changed')
+    return [RawJob(str(r['id']), urljoin(source['url'], '/careers/' + str(r['id'])), clean(r['jobOpeningName']),
+                   clean((r.get('atsLocation') or {}).get('city') or (r.get('location') or {}).get('city')),
+                   method='bamboohr-json') for r in data['result']]
+
+
+def discover_hailey(source, client, max_pages, page_size):
+    html = client.get(source['url'])
+    for chunk in [''.join(flight_chunks(html))]:
+        match = re.search(r'"jobAds":', chunk)
+        if match:
+            records, _ = json.JSONDecoder().raw_decode(chunk[match.end():])
+            if not isinstance(records, list):
+                raise SourceError('Hailey jobAds schema changed')
+            count = re.search(r'Open positions \((\d+)\)', html)
+            if count and int(count.group(1)) != len(records):
+                raise SourceError('Hailey list count differs from embedded ads')
+            return [RawJob(r['jobAdId'], urljoin(source['url'], r['link']), clean(r['title']),
+                           clean(r.get('locationName')), method='hailey-flight') for r in records]
+    raise SourceError('Hailey embedded jobAds missing')
+
+
+def discover_etteplan(source, client, max_pages, page_size):
+    data = embedded_json(client.get(source['url']), '__NEXT_DATA__')
+    rows = {str(r['openPositionMeta']['apiId']): r for r in objects(data)
+            if isinstance(r.get('openPositionMeta'), dict) and r['openPositionMeta'].get('apiId')}
+    if not rows:
+        raise SourceError('Etteplan embedded positions missing')
+    jobs = []
+    for key, r in rows.items():
+        meta = r['openPositionMeta']
+        deadline = datetime.strptime(meta['applicationDue'], '%d/%m/%Y').date().isoformat() if meta.get('applicationDue') else ''
+        jobs.append(RawJob(key, meta['advertisementUrl'], clean(r['title']),
+                           '; '.join(n['name'] for n in r['openPositionLocations']['nodes']),
+                           valid_through=deadline, method='etteplan-jobylon'))
+    return jobs
+
+
+def discover_html(source, client, max_pages, page_size):
+    """Declarative link selection, explicit empty states and bounded next-page traversal."""
+    url, visited, jobs = source['url'], set(), {}
+    for _ in range(max_pages):
+        if url in visited:
+            raise SourceError('Repeated HTML pagination URL')
+        visited.add(url)
+        html = client.get(url)
+        doc = Document(html).root
+        selector = source.get('container', {})
+        board = next(doc.find(**selector), None) if selector else doc
+        if board is None:
+            raise SourceError('Expected listing container is missing')
+        pattern = source['link_pattern']
+        links = [a for a in board.find('a') if re.search(pattern, a.attrs.get('href', ''))]
+        if not links and not re.search(source.get('empty_pattern', r'(?!)'), plain_text(board.html()), re.I):
+            raise SourceError('No job links or verified empty-state marker')
+        for a in links:
+            target = urljoin(url, a.attrs['href'])
+            validate_url(target, source['hosts'])
+            jobs.setdefault(canonical_url(target), RawJob(native_id(target), target, clean(a.text()), method='html-jsonld'))
+        next_links = [a for a in board.find('a') if a.attrs.get('rel') == 'next' or
+                      re.search(source.get('next_pattern', r'(?!)'), a.attrs.get('class', ''))]
+        # TalentBrew declares its total and current page on the listing container.
+        if 'data-total-results' in board.attrs:
+            total = int(board.attrs['data-total-results'])
+            pages = int(board.attrs.get('data-total-pages', '1'))
+            current = int(board.attrs.get('data-current-page', '1'))
+            if current < pages:
+                next_url = dict(parse_qsl(urlsplit(url).query))
+                next_url['p'] = str(current + 1)
+                parts = urlsplit(source['url'])
+                url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(next_url), ''))
+                continue
+            if len(jobs) != total:
+                raise SourceError(f'TalentBrew advertised {total} ads but discovered {len(jobs)}')
+        if not next_links:
+            return list(jobs.values())
+        url = urljoin(url, next_links[0].attrs['href'])
+    raise SourceError('HTML pagination cap reached')
+
+
+def discover_blocked(source, client, max_pages, page_size):
+    raise SourceError(source['reason'])
+
+
+def discover_afry(source, client, max_pages, page_size):
+    data = json.loads(client.get(source['api_url']))
+    if not isinstance(data.get('Adverts'), list) or data.get('CacheCold'):
+        raise SourceError('AFRY job cache missing or still warming')
+    return [RawJob(str(r['Id']), urljoin(source['url'], r['DetailUrl']), clean(r['Title']),
+                   '; '.join(c['Name'] for c in r.get('Cities', [])),
+                   valid_through=r.get('LastApplyDate', ''), method='afry-jsonld') for r in data['Adverts']]
+
+
+def discover_sigma(source, client, max_pages, page_size):
+    jobs = {}
+    for _ in range(max_pages):
+        url = source['api_url'] + '?' + urlencode({'limit': page_size, 'offset': len(jobs), 'lang': 'en',
+                                                 'parentCompany[]': 'Sigma Technology', 'city': 'Lund'})
+        data = json.loads(client.get(url))
+        if not isinstance(data.get('data'), list) or not str(data.get('total', '')).isdigit():
+            raise SourceError('Sigma Profiler schema changed')
+        for r in data['data']:
+            if r['id'] in jobs:
+                raise SourceError('Sigma repeated pagination')
+            description = ''.join('<h2>' + label + '</h2>' + r[key] for key, label in
+                                  [('description', 'Role'), ('qualifications', 'Requirements'),
+                                   ('experience', 'Experience'), ('offer', 'Offer')]
+                                  if r.get(key))
+            jobs[r['id']] = RawJob(r['id'], r['link'], clean(r['title']), clean(r['cities']), description,
+                                   valid_through=long_date(r.get('expirationDate') or ''), method='sigma-json')
+        if len(jobs) >= int(data['total']):
+            return list(jobs.values())
+        if not data['data']:
+            raise SourceError('Sigma stopped before advertised total')
+    raise SourceError('Sigma pagination cap reached')
+
+
+def swedish_date(text):
+    months = 'januari februari mars april maj juni juli augusti september oktober november december'.split()
+    match = re.search(r'(\d{1,2})\s+(' + '|'.join(months) + r')\s+(\d{4})', text, re.I)
+    return f'{int(match[3]):04}-{months.index(match[2].lower()) + 1:02}-{int(match[1]):02}' if match else ''
+
+
+def long_date(value):
+    if not value:
+        return ''
+    date = iso_date(value) or swedish_date(value)
+    if date:
+        return date
+    for fmt in ['%d %B %Y', '%B %d, %Y']:
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            pass
+    raise SourceError(f'Unrecognised date: {value}')
+
+
+def discover_dokumentera(source, client, max_pages, page_size):
+    data = embedded_json(client.get(source['url']), '__NEXT_DATA__')
+    blocks = data['props']['pageProps']['acfBlocks']
+    block = next((b for b in blocks if b.get('name') == 'acf/job-listings'), None)
+    if block is None or not isinstance(block.get('jobs'), list):
+        raise SourceError('Dokumentera job-listings block missing')
+    ids = list(dict.fromkeys(str(j['position']) for j in block['jobs']))
+    if len(ids) > max_pages * 100:
+        raise SourceError('Dokumentera listing exceeds pagination cap')
+    jobs = []
+    for offset in range(0, len(ids), 100):
+        url = source['api_url'] + '?' + urlencode({'include': ','.join(ids[offset:offset + 100]), 'per_page': 100})
+        rows = json.loads(client.get(url))
+        if not isinstance(rows, list):
+            raise SourceError('Dokumentera public WordPress jobs schema changed')
+        # Public REST excludes unpublished/deleted IDs still left in the listing block.
+        for r in rows:
+            if r.get('status') != 'publish' or str(r['id']) not in ids:
+                raise SourceError('Unexpected Dokumentera job state or ID')
+            jobs.append(RawJob(str(r['id']), urljoin(source['url'] + '/', r['slug']),
+                               clean(r['title']['rendered']), posted_date=iso_date(r.get('date')),
+                               method='dokumentera-next'))
+    return jobs
+
+
+def discover_dassault(source, client, max_pages, page_size):
+    jobs = {}
+    for page in range(max_pages):
+        params = {'q': '#all (card_content_lang:en) (card_content_type="career")',
+                  'b': page * 100, 'hf': 100, 'output_format': 'json'}
+        data = json.loads(client.get(source['api_url'] + '/card_search_api?' + urlencode(params)))
+        if not isinstance(data.get('hits'), list) or not isinstance(data.get('nhits'), int):
+            raise SourceError('Dassault career index schema changed')
+        for hit in data['hits']:
+            r = {m['name']: m['value'] for m in hit['metas']}
+            if r.get('content_type') != 'career' or r['card_id'] in jobs:
+                raise SourceError('Unexpected or repeated Dassault career card')
+            jobs[r['card_id']] = RawJob(r['card_id'], r['content_cta_1_url'], clean(r['content_title']),
+                                         clean(r.get('content_info_2_value')), method='dassault-api')
+        if len(jobs) >= data['nhits']:
+            return list(jobs.values())
+        if not data['hits']:
+            raise SourceError('Dassault index stopped before advertised total')
+    raise SourceError('Dassault pagination cap reached')
+
+
+def discover_combitech(source, client, max_pages, page_size):
+    doc = Document(client.get(source['url'])).root
+    board = next(doc.find(id='job-list'), None)
+    if board is None:
+        raise SourceError('Combitech job-list missing')
+    jobs = {}
+    # The smallest card ancestor carries its own city and deadline in h5 fields.
+    for card in board.find('div'):
+        links = [a for a in card.find('a') if re.search(r'job_posting-\d+-\d+', a.attrs.get('href', ''))]
+        urls = {urljoin(source['url'], a.attrs['href']) for a in links}
+        fields = list(card.find('h5'))
+        if len(urls) == 1 and fields:
+            url = next(iter(urls))
+            title = next(card.find('h3'), None)
+            jobs[url] = RawJob(native_id(url), url, clean(title.text()) if title else clean(links[0].text()),
+                               clean(fields[0].text()), valid_through=swedish_date(fields[-1].text()), method='combitech-html')
+    total = re.search(r'(\d+) tillgängliga tjänster', clean(board.text()))
+    if not total or int(total[1]) != len(jobs):
+        raise SourceError('Combitech card count does not match advertised total')
+    return list(jobs.values())
+
+
+DISCOVERERS = {"feed": discover_feed, "workday": discover_workday, "reachmee": discover_reachmee,
+               "workspace": discover_workspace, "eightfold": discover_eightfold, "jibe": discover_jibe,
+               "bamboohr": discover_bamboohr, "hailey": discover_hailey, "etteplan": discover_etteplan,
+               "html": discover_html, "blocked": discover_blocked, "afry": discover_afry,
+               "sigma": discover_sigma, "combitech": discover_combitech, "dokumentera": discover_dokumentera,
+               "dassault": discover_dassault}
 
 
 def complete_detail(raw, source, client):
+    if raw.method == 'bamboohr-json':
+        data = json.loads(client.get(raw.url.rstrip('/') + '/detail'))
+        r = data.get('result', {}).get('jobOpening', {})
+        if not r.get('description') or not r.get('jobOpeningName'):
+            raise SourceError('BambooHR full-detail JSON missing')
+        raw.title = clean(r['jobOpeningName'])
+        raw.description = r['description']
+        raw.location = clean((r.get('atsLocation') or {}).get('city') or (r.get('location') or {}).get('city')) or raw.location
+        raw.active = r.get('jobOpeningStatus') == 'Open'
+        return raw
+    if raw.method == 'dassault-api':
+        data = json.loads(client.get(source['api_url'] + '/GetCareerCardDetailV2/en/' + raw.native_id))
+        if not isinstance(data.get('hits'), list) or len(data['hits']) != 1:
+            raise SourceError('Dassault full detail missing or ambiguous')
+        r = {m['name']: m['value'] for m in data['hits'][0]['metas']}
+        if not r.get('external_description'):
+            raise SourceError('Dassault full description missing; card summaries are insufficient')
+        raw.description = r['external_description'] + r.get('external_qualification', '')
+        raw.location = clean(r.get('location')) or raw.location
+        raw.title = clean(r.get('posting_title')) or raw.title
+        raw.posted_date = iso_date(r.get('req_open_dt'))
+        return raw
     if raw.method == "workday":
         path = urlsplit(raw.url).path.split("/job/", 1)[1]
         data = json.loads(client.get(source["api_url"] + "/job/" + path))
@@ -433,8 +802,67 @@ def complete_detail(raw, source, client):
         return RawJob(info["jobReqId"], raw.url, clean(info.get("title")), location,
                       info["jobDescription"], iso_date(info.get("startDate")), info.get("endDate", ""),
                       "workday-json", info.get("canApply") is not False)
-    if not raw.description:
-        html = client.get(raw.url)
+    if not raw.description or (raw.method == 'rss' and not raw.location):
+        try:
+            html = client.get(raw.url)
+        except HTTPSourceError as exc:
+            if exc.code not in {404, 410}:
+                raise
+            raw.active = False
+            raw.method = 'withdrawn-http'
+            return raw
+        if raw.method == 'hailey-flight':
+            texts = [c for c in flight_texts(html) if len(c) >= 40]
+            if len(texts) != 1:
+                raise SourceError('Hailey full description chunk missing or ambiguous')
+            raw.description = texts[0]
+            raw.method = 'hailey-markdown'
+            return raw
+        if raw.method == 'dokumentera-next':
+            data = embedded_json(html, '__NEXT_DATA__')['props']['pageProps']
+            blocks = data['acfBlocks']
+            header = next(b for b in blocks if b.get('name') == 'acf/header-align')
+            raw.title = clean(header['title'])
+            raw.location = '; '.join(clean(v['text']) for v in header.get('icon_text', [])
+                                     if v.get('icon') == source['location_icon'])
+            raw.description = ''.join(b['content'] for b in blocks if b.get('name') == 'acf/long-content')
+            if not raw.description:
+                raise SourceError('Dokumentera full description missing')
+            return raw
+        detail_format = source.get('detail_format')
+        if source['adapter'] == 'workspace' or detail_format:
+            doc = Document(html).root
+            title = next(doc.find('h1'), None)
+            if source['adapter'] == 'workspace':
+                description = next(doc.find(cls='content'), None)
+            elif detail_format == 'kraftringen':
+                description = next(doc.find(**{'data-editorial-content': ''}), None)
+                facts = next(doc.find(cls='fact-box'), None)
+                text = facts.text() if facts else ''
+                city = re.search(r'Stad:\s*([^\n]+)', text)
+                raw.location = clean(city[1]) if city else ''
+                deadline = re.search(r'Sista ansökningsdag:\s*([^\n]+)', text)
+                raw.valid_through = swedish_date(deadline[1]) if deadline else ''
+            elif detail_format == 'combitech':
+                description = next(doc.find(id='workday-content-container'), None)
+            elif detail_format == 'afry':
+                description = next(doc.find(cls='advert--body'), None)
+            else:  # OptiCept exposes its old ads as ordinary Elementor articles.
+                parts = list(doc.find(cls='elementor-widget-text-editor'))
+                description = Node('div', children=parts)
+                title = next(doc.find('h1'), None) or next(doc.find('h2'), None)
+                text = description.text()
+                deadline = re.search(r'This job posting expires on (\d{4}-\d{2}-\d{2})', text)
+                raw.valid_through = deadline[1] if deadline else ''
+                if re.search(r'role located in Lund\b', text):
+                    raw.location = 'Lund, Sweden'
+                    raw.location_method = 'explicit_workplace_sentence'
+            if description is None or title is None:
+                raise SourceError('Configured title or full description container missing')
+            raw.title = clean(title.text())
+            raw.description = description.html()
+            raw.method = (detail_format or 'workspace') + '-html'
+            return raw
         if source["adapter"] == "reachmee":
             doc = Document(html).root
             title = next(doc.find("h1"), None)
@@ -460,7 +888,27 @@ def complete_detail(raw, source, client):
                         raw.location_method = "explicit_workplace_sentence"
                         break
             return raw
-        return jsonld_job(html, raw.url)
+        try:
+            detail = jsonld_job(html, raw.url)
+        except SourceError:
+            if urlsplit(raw.url).hostname == 'lime-tech.jobs.personio.de':
+                doc = Document(html).root
+                title = next(doc.find('h1', cls='job-position-title'), None)
+                description = next(doc.find(cls='detail-content-block-conditions'), None)
+                # These CSS module prefixes are accompanied by a stable rendered location component.
+                locations = [n.text() for n in doc.find('span')
+                             if any(c.startswith('TruncatedLocations_locationText__') for c in n.attrs.get('class', '').split())]
+                if title is None or description is None or not locations:
+                    raise SourceError('Personio title, full description or location component missing')
+                return RawJob(raw.native_id, raw.url, clean(title.text()), '; '.join(map(clean, locations)),
+                              description.html(), method='personio-html')
+            if raw.method == 'rss' and raw.description:
+                return raw  # Preserve full feed content; unresolved city is audited below.
+            raise
+        detail.native_id = raw.native_id
+        detail.location = detail.location or raw.location
+        detail.valid_through = detail.valid_through or raw.valid_through
+        return detail
     return raw
 
 
@@ -494,7 +942,13 @@ def load_sources(path=CONFIG_PATH):
         ids.add(source["id"])
         if source.get("adapter") not in DISCOVERERS or not source.get("employer") or not source.get("hosts"):
             raise SourceError("Invalid adapter, employer or allowed hosts")
-        for key in ("url", "feed_url" if source["adapter"] == "feed" else "api_url" if source["adapter"] == "workday" else "url"):
+        required = {'feed': ['feed_url'], 'workday': ['api_url'], 'eightfold': ['api_url', 'domain'],
+                    'jibe': ['api_url'], 'bamboohr': ['api_url'], 'afry': ['api_url'],
+                    'sigma': ['api_url'], 'dokumentera': ['api_url', 'location_icon'],
+                    'dassault': ['api_url'], 'html': ['link_pattern'], 'blocked': ['reason']}
+        if not source.get('url') or any(not source.get(k) for k in required.get(source['adapter'], [])):
+            raise SourceError('Required source configuration field missing')
+        for key in [k for k in ('url', 'feed_url', 'api_url') if k in source]:
             validate_url(source.get(key, ""), source["hosts"])
     return sources
 
@@ -546,16 +1000,24 @@ def index_sources(sources, results_root, matching_config, limit=25, max_pages=20
                     audit["location_filtered"] += 1
                     continue
                 try:
+                    if not raw.active or expired(raw.valid_through, today):
+                        audit['expired'] += 1
+                        continue
                     raw = complete_detail(raw, source, client)
+                    if not raw.active or expired(raw.valid_through, today):
+                        audit['expired'] += 1
+                        continue
+                    if not raw.location or raw.location in {'Sweden', 'Sverige'}:
+                        body = plain_text(description_fragment(raw.description))
+                        if re.search(r'(?:^|\n)Location\s*\nLund,\s*Sweden\b', body, re.I):
+                            raw.location = 'Lund, Sweden'
+                            raw.location_method = 'labelled_ad_location'
                     if not raw.location or raw.location in {"Sweden", "Sverige"}:
                         audit["location_unknown"] += 1
                         audit["location_review"].append({"url": raw.url, "title": raw.title, "reported_location": raw.location})
                         continue
                     if not re.search(r"\bLund\b", raw.location, re.I):
                         audit["location_filtered"] += 1
-                        continue
-                    if not raw.active or expired(raw.valid_through, today):
-                        audit["expired"] += 1
                         continue
                     payload = normalize(raw, source, matching_config)
                     if payload["job_id"] in seen or payload["url"] in urls:
@@ -570,7 +1032,7 @@ def index_sources(sources, results_root, matching_config, limit=25, max_pages=20
             if audit["errors"] or audit["location_unknown"]:
                 audit["status"] = "partial"
         except (SourceError, ValueError, OSError, KeyError, TypeError) as exc:
-            audit["status"] = "failed"
+            audit["status"] = "blocked" if source['adapter'] == 'blocked' else "failed"
             audit["errors"].append({"url": source["url"], "message": str(exc)})
         audit["requests"] = client.requests
         audits.append(audit)
@@ -593,7 +1055,7 @@ def write_results(jobs, audits, results_root, bucket="waiting_room"):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
-    parser.add_argument("--source", action="append", help="Source ID; repeat to select several, default all five")
+    parser.add_argument("--source", action="append", help="Source ID; repeat to select several, default all configured sources")
     parser.add_argument("--results-root", type=Path, default=Path("results"))
     parser.add_argument("--results-bucket", choices=("waiting_room", "discard"), default="waiting_room")
     parser.add_argument("--matching-config", type=Path)
