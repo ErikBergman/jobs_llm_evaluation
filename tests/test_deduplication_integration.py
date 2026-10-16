@@ -134,5 +134,17 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn(self.new['job_id'],load_seen_job_ids(self.root))
 
 
+    def test_workflow_checks_duplicates_before_profile_classification(self):
+        workflow=(Path(__file__).resolve().parents[1]/'.github/workflows/job-search.yml').read_text()
+        duplicate_step=workflow.index('- name: Deduplicate cross-source waiting-room jobs')
+        classify_step=workflow.index('- name: Classify waiting-room jobs')
+        self.assertLess(duplicate_step,classify_step)
+        block=workflow[duplicate_step:classify_step]
+        self.assertIn("steps.schedule_gate.outputs.report_job == 'true'",block)
+        self.assertIn('secrets.OPENAI_API_KEY',block)
+        self.assertIn('--results-root "$RUNTIME_RESULTS_DIR"',block)
+        self.assertIn('JOB_DEDUPLICATION_MODE',block)
+
+
 if __name__=='__main__':
     unittest.main()

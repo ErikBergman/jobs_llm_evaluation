@@ -57,12 +57,13 @@ Use the project's Python 3.12 runtime. No new package dependencies are required.
 ```bash
 python3 linkedin_guest_jobs.py --results-root runtime_results --results-bucket waiting_room --card-limit 100 --detail-limit 100 --max-pages 10
 python3 employer_jobs.py --results-root runtime_results --limit 25
+python3 deduplicate_jobs.py --results-root runtime_results
 python3 match_jobs.py --waiting-room --output-root runtime_results --matcher mock
 ```
 
-The last command demonstrates compatibility using the free mock matcher. Use the existing OpenAI matcher configuration for actual candidate-profile evaluation. Source failures return nonzero without discarding successful ads, so orchestration should retain the source failure and still allow healthy waiting-room inputs to be processed.
+The last command demonstrates compatibility using the free mock matcher. The preceding duplicate stage can make bounded small-model calls when recent candidates exist; use `--mode off` there and `--deduplication-mode off` on employer imports for entirely offline/mock operation. Use the existing OpenAI matcher configuration for actual candidate-profile evaluation. Source failures return nonzero without discarding successful ads, so orchestration should retain the source failure and still allow healthy waiting-room inputs to be processed.
 
-The existing scheduled workflow has not been changed. Scheduling requires placing the employer command after LinkedIn scraping and before waiting-room classification, with the same results root and matching configuration. The all-source command currently returns nonzero for the three documented blocks and Schneider's unresolved locations; the diagnostics explain why.
+The scheduled workflow now runs cross-source deduplication before waiting-room classification. Employer scraping still requires adding the employer command after LinkedIn scraping, with the same results root and matching configuration. The all-source command currently returns nonzero for the three documented blocks and Schneider's unresolved locations; the diagnostics explain why.
 
 Select individual sources with repeated flags:
 
@@ -84,7 +85,7 @@ Workplace must come from explicit provider metadata, verified table cells or a l
 
 The HTTP client limits response size and request rate, follows only configured HTTPS hosts, retains ordinary cookies, retries temporary failures and honours short `Retry-After` values. It does not execute downloaded scripts or submit application/contact forms. New external recruitment hosts require explicit configuration after verification.
 
-Repeat indexing follows the app's existing seen-once policy: edited ads are not automatically reevaluated. Cross-posted LinkedIn and employer ads can still produce separate records when IDs and URLs differ. A future merge should use employer application URLs/requisition IDs; title/company alone is not sufficient evidence of identity.
+Repeat indexing follows the app's existing seen-once policy: edited ads are not automatically reevaluated. A bounded small-model check now compares plausible recent cross-source ads and archives the newer copy only after an explicit duplicate verdict. Distinct requisitions, uncertain results and unavailable comparisons are retained. See [job_deduplication.md](job_deduplication.md) for the seven-day window, cost controls and audit format.
 
 ## Verification
 

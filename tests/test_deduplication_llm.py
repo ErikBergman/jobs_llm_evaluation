@@ -120,6 +120,11 @@ class LLMTests(unittest.TestCase):
         self.assertEqual(audit['input_tokens'], 0)
         self.assertEqual(len(kept), 1)
 
+    def test_malformed_cached_decision_fails_open(self):
+        key=self.cache.key(self.new,[self.older])
+        self.cache.entries[key]={'result':{'decision':[],'duplicate_of':None,'reason':'Invalid cached data'}}
+        self.assertIsNone(self.cache.get(key,[self.older]))
+
     def test_model_or_description_changes_invalidate_cache(self):
         self.run_dedup(response('different', None))
         key = self.cache.key(self.new, [self.older])

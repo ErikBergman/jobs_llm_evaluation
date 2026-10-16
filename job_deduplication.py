@@ -268,7 +268,8 @@ def decision_schema(candidates):
 
 
 def validate_decision(value, candidates):
-    if not isinstance(value, dict) or value.get('decision') not in {'duplicate', 'different', 'uncertain'}:
+    if (not isinstance(value, dict) or not isinstance(value.get('decision'), str)
+            or value['decision'] not in {'duplicate', 'different', 'uncertain'}):
         raise ValueError('Invalid duplicate decision')
     target = value.get('duplicate_of')
     ids = {r.record_id for r in candidates}

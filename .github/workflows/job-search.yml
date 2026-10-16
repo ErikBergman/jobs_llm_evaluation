@@ -185,6 +185,18 @@ jobs:
           echo "new_jobs=true" >> "$GITHUB_OUTPUT"
           echo "scrape_path=${scrape_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Deduplicate cross-source waiting-room jobs
+        if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JOB_DEDUPLICATION_MODE: ${{ vars.JOB_DEDUPLICATION_MODE || 'openai' }}
+          JOB_DEDUPLICATION_MODEL: ${{ vars.JOB_DEDUPLICATION_MODEL || 'gpt-5.4-mini' }}
+        run: |
+          python3 deduplicate_jobs.py \
+            --results-root "$RUNTIME_RESULTS_DIR" \
+            --mode "$JOB_DEDUPLICATION_MODE" \
+            --model "$JOB_DEDUPLICATION_MODEL"
+
       - name: Classify waiting-room jobs
         if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
         id: classify
