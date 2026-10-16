@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "axis",
+      "employer": "Axis",
+      "adapter": "workday",
+      "url": "https://axis.wd3.myworkdayjobs.com/External_Career_Site",
+      "api_url": "https://axis.wd3.myworkdayjobs.com/wday/cxs/axis/External_Career_Site",
+      "hosts": [
+        "axis.wd3.myworkdayjobs.com"
+      ],
+      "location": "Lund"
+    },
+    {
+      "id": "cellavision",
+      "employer": "CellaVision",
+      "adapter": "feed",
+      "url": "https://career.cellavision.com/jobs",
+      "feed_url": "https://career.cellavision.com/jobs.rss",
+      "delegated_links": true,
+      "hosts": [
+        "career.cellavision.com",
+        "rekrytering.adeptus.se"
+      ]
+    },
+    {
+      "id": "lund-university",
+      "employer": "Lund University / MAX IV",
+      "adapter": "feed",
+      "url": "https://lu.varbi.com/",
+      "feed_url": "https://lu.varbi.com/what:rssfeed/",
+      "metadata": "varbi",
+      "hosts": [
+        "lu.varbi.com"
+      ]
+    },
+    {
+      "id": "tetra-pak",
+      "employer": "Tetra Pak",
+      "adapter": "feed",
+      "url": "https://jobs.tetrapak.com/search/?q=&locationsearch=Lund",
+      "feed_url": "https://jobs.tetrapak.com/sitemap.xml",
+      "hosts": [
+        "jobs.tetrapak.com"
+      ]
+    },
+    {
+      "id": "ess",
+      "employer": "ESS",
+      "adapter": "reachmee",
+      "url": "https://ess.eu/careers/vacancies",
+      "hosts": [
+        "ess.eu",
+        "web103.reachmee.com"
+      ]
+    }
+  ]
+}

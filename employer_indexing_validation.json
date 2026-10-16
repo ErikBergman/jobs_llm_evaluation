@@ -1,0 +1,193 @@
+{
+  "validated_at": "2026-10-16T04:37:59.212405+00:00",
+  "scope": "Five employer pilots; public indexing only, no OpenAI evaluation or notifications.",
+  "sources": [
+    {
+      "source_id": "axis",
+      "employer": "Axis",
+      "status": "ok",
+      "discovered": 29,
+      "indexed": 29,
+      "already_seen": 0,
+      "location_filtered": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "selection_truncated": false,
+      "errors": [],
+      "location_review": [],
+      "requests": 32
+    },
+    {
+      "source_id": "cellavision",
+      "employer": "CellaVision",
+      "status": "ok",
+      "discovered": 3,
+      "indexed": 3,
+      "already_seen": 0,
+      "location_filtered": 0,
+      "location_unknown": 0,
+      "expired": 0,
+      "selection_truncated": false,
+      "errors": [],
+      "location_review": [],
+      "requests": 4
+    },
+    {
+      "source_id": "lund-university",
+      "employer": "Lund University / MAX IV",
+      "status": "ok",
+      "discovered": 85,
+      "indexed": 79,
+      "already_seen": 0,
+      "location_filtered": 6,
+      "location_unknown": 0,
+      "expired": 0,
+      "selection_truncated": false,
+      "errors": [],
+      "location_review": [],
+      "requests": 2
+    },
+    {
+      "source_id": "tetra-pak",
+      "employer": "Tetra Pak",
+      "status": "ok",
+      "discovered": 245,
+      "indexed": 5,
+      "already_seen": 0,
+      "location_filtered": 240,
+      "location_unknown": 0,
+      "expired": 0,
+      "selection_truncated": false,
+      "errors": [],
+      "location_review": [],
+      "requests": 1
+    },
+    {
+      "source_id": "ess",
+      "employer": "ESS",
+      "status": "ok",
+      "discovered": 1,
+      "indexed": 0,
+      "already_seen": 0,
+      "location_filtered": 1,
+      "location_unknown": 0,
+      "expired": 0,
+      "selection_truncated": false,
+      "errors": [],
+      "location_review": [],
+      "requests": 3
+    }
+  ],
+  "indexed_ads": 116,
+  "prefilter_passed": 102,
+  "prefilter_rejected": 14,
+  "requirements_extraction": {
+    "pattern": 94,
+    "full_description": 22
+  },
+  "description_extraction": {
+    "workday-json": 29,
+    "rss": 85,
+    "jsonld": 2
+  },
+  "missing_required_fields": 0,
+  "repeat_run": {
+    "indexed_ads": 0,
+    "already_seen": 116,
+    "sources": [
+      {
+        "source_id": "axis",
+        "employer": "Axis",
+        "status": "ok",
+        "discovered": 29,
+        "indexed": 0,
+        "already_seen": 29,
+        "location_filtered": 0,
+        "location_unknown": 0,
+        "expired": 0,
+        "selection_truncated": false,
+        "errors": [],
+        "location_review": [],
+        "requests": 3
+      },
+      {
+        "source_id": "cellavision",
+        "employer": "CellaVision",
+        "status": "ok",
+        "discovered": 3,
+        "indexed": 0,
+        "already_seen": 3,
+        "location_filtered": 0,
+        "location_unknown": 0,
+        "expired": 0,
+        "selection_truncated": false,
+        "errors": [],
+        "location_review": [],
+        "requests": 2
+      },
+      {
+        "source_id": "lund-university",
+        "employer": "Lund University / MAX IV",
+        "status": "ok",
+        "discovered": 85,
+        "indexed": 0,
+        "already_seen": 79,
+        "location_filtered": 6,
+        "location_unknown": 0,
+        "expired": 0,
+        "selection_truncated": false,
+        "errors": [],
+        "location_review": [],
+        "requests": 2
+      },
+      {
+        "source_id": "tetra-pak",
+        "employer": "Tetra Pak",
+        "status": "ok",
+        "discovered": 245,
+        "indexed": 0,
+        "already_seen": 5,
+        "location_filtered": 240,
+        "location_unknown": 0,
+        "expired": 0,
+        "selection_truncated": false,
+        "errors": [],
+        "location_review": [],
+        "requests": 1
+      },
+      {
+        "source_id": "ess",
+        "employer": "ESS",
+        "status": "ok",
+        "discovered": 1,
+        "indexed": 0,
+        "already_seen": 0,
+        "location_filtered": 1,
+        "location_unknown": 0,
+        "expired": 0,
+        "selection_truncated": false,
+        "errors": [],
+        "location_review": [],
+        "requests": 3
+      }
+    ]
+  },
+  "tests": {
+    "new_offline_tests": 17,
+    "full_suite_tests": 129,
+    "full_suite_passed": true,
+    "target_runtime": "Python 3.12.14"
+  },
+  "limits": {
+    "new_ads_per_source": 200,
+    "workday_page_size": 20,
+    "maximum_pages": 20,
+    "minimum_request_interval_seconds": 0.25
+  },
+  "matcher_compatibility": {
+    "mode": "mock",
+    "processed_ads": 116,
+    "completed": true,
+    "profile_evaluation_performed": false
+  }
+}

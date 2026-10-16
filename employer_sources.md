@@ -2,7 +2,7 @@
 
 `job_listing_pages_lund.json` contains 48 employer career sources: the 27 supplied on 2026-10-09 and 21 researched additions reviewed on 2026-10-15 (Europe/Stockholm).
 
-This is a research catalogue for adding employer sources. The current scraper and scheduled workflow still ingest LinkedIn only; saving this JSON does not enable employer-site scraping. The entries describe career sources, not individual job ads or confirmed job matches.
+This is a research catalogue for adding employer sources. A five-source employer indexing pilot is now available in `employer_jobs.py`; see [employer_indexing.md](employer_indexing.md) for strategies, live results and use alongside LinkedIn. The scheduled workflow still runs LinkedIn only. The catalogue entries describe career sources, not individual job ads or confirmed job matches.
 
 ## Selection and location
 
@@ -35,7 +35,7 @@ Preserve employer discovery broadly and filter individual advertisements by work
 
 ESS now uses its directly linked `/careers/vacancies` page. VA SYD now uses its readable Varbi board. Etteplan now points to Open Positions rather than a generic application page. The Tetra Pak and Alfa Laval entries retain the supplied Lund searches and add readable official fallback pages. Intui uses the current destination of the former IntuiCell recruitment domain.
 
-No source is enabled for ingestion merely because it is marked `verified`. An adapter must still extract job IDs, canonical ad URLs, full descriptions and workplace metadata, handle pagination and empty/error responses, and feed the app's existing prefilter/matching flow. Do not pass employer URLs to the LinkedIn-specific search configuration.
+The `verified` catalogue flag alone does not enable ingestion. The five pilot configurations are in `employer_scraping.json`; individual strategies for all 48 entries are in `employer_indexing_strategies.json`. Any further adapter must extract job IDs, canonical ad URLs, full descriptions and workplace metadata, handle pagination and empty/error responses, and feed the app's existing prefilter/matching flow. Do not pass employer URLs to the LinkedIn-specific search configuration.
 
 ## Follow-up research
 
