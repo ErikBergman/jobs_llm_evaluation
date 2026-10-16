@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "lookback_days": 7,
+  "max_candidates": 3,
+  "max_calls": 20,
+  "excerpt_chars": 1600,
+  "max_output_tokens": 512,
+  "model": "gpt-5.4-mini",
+  "employer_aliases": {
+    "Axis": ["Axis Communications"],
+    "Lund University / MAX IV": ["Lund University", "Lunds universitet", "MAX IV", "MAX IV Laboratory"],
+    "ESS": ["European Spallation Source", "European Spallation Source ERIC"],
+    "Prevas Test & Measurement (formerly DVel)": ["Prevas Test & Measurement", "DVel"],
+    "Intui (formerly IntuiCell)": ["Intui", "IntuiCell"]
+  }
+}
