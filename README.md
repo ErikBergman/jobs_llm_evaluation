@@ -91,7 +91,7 @@ When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. T
 
 ## Telegram summaries
 
-Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
+Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. Messages with matches start with `✅ New match!` and break down the new matches by source, such as `From LinkedIn` or `From Axis` for a direct company-page import. When there are no matches, the message says `0 new matches found this run`. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
 
 ## Offline corpus tests
 

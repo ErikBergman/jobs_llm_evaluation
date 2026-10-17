@@ -7,10 +7,12 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -129,6 +131,23 @@ def jobs_from_input(metadata: dict[str, Any] | None) -> dict[str, dict[str, Any]
     return output
 
 
+def job_source_label(job: dict[str, Any]) -> str:
+    job_id = str(job.get("job_id") or "")
+    if job.get("source") == "employer" or job_id.startswith("employer:"):
+        company = job.get("company")
+        if isinstance(company, str) and company.strip():
+            return company.strip()
+        source_id = job.get("source_id") or (job_id.split(":")[1] if job_id.startswith("employer:") else "")
+        return str(source_id).replace("-", " ").title() if source_id else "Company career pages"
+    try:
+        host = (urlsplit(str(job.get("url") or "")).hostname or "").lower()
+    except ValueError:
+        host = ""
+    if job.get("source") == "linkedin" or host == "linkedin.com" or host.endswith(".linkedin.com"):
+        return "LinkedIn"
+    return "Unknown source"
+
+
 def current_hits(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
     if not metadata:
         return []
@@ -152,19 +171,10 @@ def current_hits(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
                 "title": str(title),
                 "url": str(url),
                 "reason": str(reason),
+                "source_name": job_source_label(job or decision),
             }
         )
     return hits
-
-
-def matching_level_message(metadata: dict[str, Any] | None) -> str:
-    match_level = metadata.get("match_level") if metadata else None
-    normalized = str(match_level or "good_match").strip().lower().replace("-", "_").replace(" ", "_")
-    if normalized in {"decent", "decent_match"}:
-        return "Searching for decent matches"
-    if normalized in {"unicorn", "unicorn_match"}:
-        return "Searching for unicorn matches"
-    return "Searching for good matches"
 
 
 def truncate_message(message: str, limit: int = TELEGRAM_MAX_MESSAGE_LENGTH) -> str:
@@ -179,15 +189,20 @@ def build_message(
     accumulated_jobs: int,
     hits: list[dict[str, str]],
     hours: int = 12,
-    matching_level: str = "Searching for good matches",
 ) -> str:
-    lines = [
+    lines = ["✅ New match!", ""] if hits else []
+    lines.extend([
         "Job search summary",
-        matching_level,
         f"Considered in last {hours} hours: {considered_last_hours}",
         f"Ads in memory: {accumulated_jobs}",
-        f"New matches in this run: {len(hits)}",
-    ]
+    ])
+    if hits:
+        lines.extend([f"New matches in this run: {len(hits)}", ""])
+        counts = Counter(hit.get("source_name") or job_source_label(hit) for hit in hits)
+        for source in sorted(counts, key=lambda name: (name != "LinkedIn", name.casefold())):
+            lines.append(f"- From {source}: {counts[source]}")
+    else:
+        lines.append("0 new matches found this run")
     for index, hit in enumerate(hits, start=1):
         lines.extend(
             [
@@ -227,7 +242,6 @@ def summary_message(results_root: Path, current_input: str | None, hours: int, n
         accumulated_jobs=accumulated_job_count(results_root),
         hits=current_hits(latest_metadata),
         hours=hours,
-        matching_level=matching_level_message(latest_metadata),
     )
 
 

@@ -11,7 +11,7 @@ from telegram_notify import (
     current_hits,
     current_metadata,
     load_metadata_files,
-    matching_level_message,
+    job_source_label,
     summary_message,
 )
 
@@ -82,6 +82,7 @@ class TelegramNotifyTests(unittest.TestCase):
                         "title": "Backend Developer",
                         "url": "https://se.linkedin.com/jobs/view/backend-developer-440123",
                         "reason": "Strong Python integration fit.",
+                        "source_name": "LinkedIn",
                     }
                 ],
             )
@@ -133,7 +134,8 @@ class TelegramNotifyTests(unittest.TestCase):
             )
 
         self.assertIn("Considered in last 12 hours: 1", message)
-        self.assertIn("Searching for unicorn matches", message)
+        self.assertTrue(message.startswith("✅ New match!\n"))
+        self.assertNotIn("Searching for", message)
         self.assertIn("Ads in memory: 1", message)
         self.assertIn("New matches in this run: 1", message)
         self.assertIn("cheat-mode://perfect-job-ad", message)
@@ -169,7 +171,8 @@ class TelegramNotifyTests(unittest.TestCase):
                 now=datetime(2026, 4, 25, 18, 0, tzinfo=timezone.utc),
             )
 
-        self.assertIn("New matches in this run: 0", message)
+        self.assertIn("0 new matches found this run", message)
+        self.assertNotIn("✅ New match!", message)
         self.assertNotIn("Old reason.", message)
 
     def test_current_metadata_prefers_matching_input_path(self) -> None:
@@ -183,16 +186,56 @@ class TelegramNotifyTests(unittest.TestCase):
     def test_build_message_handles_no_matches(self) -> None:
         message = build_message(considered_last_hours=0, accumulated_jobs=4, hits=[], hours=12)
 
-        self.assertIn("Searching for good matches", message)
+        self.assertNotIn("Searching for", message)
+        self.assertNotIn("✅ New match!", message)
         self.assertIn("Considered in last 12 hours: 0", message)
         self.assertIn("Ads in memory: 4", message)
-        self.assertIn("New matches in this run: 0", message)
+        self.assertIn("0 new matches found this run", message)
+        self.assertNotIn("New matches in this run:", message)
+        self.assertNotIn("- From ", message)
 
-    def test_matching_level_message_formats_supported_levels(self) -> None:
-        self.assertEqual(matching_level_message({"match_level": "decent_match"}), "Searching for decent matches")
-        self.assertEqual(matching_level_message({"match_level": "good-match"}), "Searching for good matches")
-        self.assertEqual(matching_level_message({"match_level": "unicorn"}), "Searching for unicorn matches")
-        self.assertEqual(matching_level_message({}), "Searching for good matches")
+    def test_job_source_label_handles_legacy_linkedin_and_employer_provenance(self) -> None:
+        cases = [
+            ({"company": "Axis", "url": "https://se.linkedin.com/jobs/view/1"}, "LinkedIn"),
+            ({"source": "employer", "company": "Axis", "url": "https://axis.wd3.myworkdayjobs.com/job/1"}, "Axis"),
+            ({"job_id": "employer:axis:123", "company": "Axis"}, "Axis"),
+            ({"job_id": "employer:axis:123"}, "Axis"),
+            ({"url": "https://linkedin.com.example.org/job/1"}, "Unknown source"),
+            ({}, "Unknown source"),
+        ]
+        for job, expected in cases:
+            with self.subTest(job=job):
+                self.assertEqual(job_source_label(job), expected)
+
+    def test_summary_message_groups_current_hits_by_scrape_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_dir = root / "discard" / "run"
+            run_dir.mkdir(parents=True)
+            input_path = run_dir / "mixed_jobs.json"
+            jobs = [
+                {"job_id": "1", "company": "Axis", "title": "LinkedIn role", "url": "https://se.linkedin.com/jobs/view/1"},
+                {"job_id": "employer:axis:2", "source": "employer", "source_id": "axis", "company": "Axis", "title": "Career role A", "url": "https://careers.example.org/2"},
+                {"job_id": "employer:axis:3", "source": "employer", "source_id": "axis", "company": "Axis", "title": "Career role B", "url": "https://careers.example.org/3"},
+                {"job_id": "employer:other:4", "source": "employer", "company": "Other", "title": "Rejected role", "url": "https://careers.example.org/4"},
+            ]
+            input_path.write_text(json.dumps(jobs), encoding="utf-8")
+            metadata = {
+                "input_path": str(input_path),
+                "matched_at": "2026-04-25T17:00:00Z",
+                "job_count": len(jobs),
+                "decisions": [dict(job_id=job["job_id"], title=job["title"], hit=index < 3, reason="Fit.") for index, job in enumerate(jobs)],
+            }
+            (run_dir / "mixed_jobs_match_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+            message = summary_message(root, str(input_path), 12, datetime(2026, 4, 25, 18, tzinfo=timezone.utc))
+
+        self.assertTrue(message.startswith("✅ New match!\n"))
+        self.assertIn("New matches in this run: 3\n\n- From LinkedIn: 1\n- From Axis: 2", message)
+        self.assertNotIn("From Other", message)
+        self.assertNotIn("Searching for", message)
+        self.assertIn("Career role A", message)
+        self.assertIn("Career role B", message)
+        self.assertIn("https://se.linkedin.com/jobs/view/1", message)
 
     def test_load_metadata_files_ignores_unreadable_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
