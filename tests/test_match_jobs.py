@@ -497,6 +497,82 @@ class MockMatcherTests(unittest.TestCase):
         self.assertEqual([[job["job_id"] for job in jobs] for jobs in provider_inputs], [["1"]])
         self.assertEqual([decision["stage"] for decision in decisions], ["confirmation", "prefilter"])
 
+    def test_apply_prefilter_rejects_excluded_location_before_provider(self) -> None:
+        provider_inputs = []
+
+        def fake_provider(jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+            provider_inputs.append(jobs)
+            return [{"job_id": job["job_id"], "title": job.get("title"), "hit": True, "stage": "confirmation"} for job in jobs]
+
+        decisions = apply_prefilter_to_decisions(
+            [
+                {
+                    "job_id": "1",
+                    "title": "Backend Developer",
+                    "location": "Kristianstads kommun, Skåne County, Sweden",
+                    "prefilter_pass": True,
+                },
+                {
+                    "job_id": "2",
+                    "title": "Backend Developer",
+                    "location": "Lund, Skåne County, Sweden",
+                    "prefilter_pass": True,
+                },
+            ],
+            fake_provider,
+        )
+
+        self.assertEqual([[job["job_id"] for job in jobs] for jobs in provider_inputs], [["2"]])
+        self.assertEqual([decision["stage"] for decision in decisions], ["prefilter", "confirmation"])
+        self.assertEqual(decisions[0]["reason"], "Rejected excluded location: Kristianstad")
+        self.assertEqual(decisions[0]["prefilter_negative_matches"], ["Kristianstad"])
+
+    def test_apply_prefilter_ignores_excluded_location_names_outside_metadata(self) -> None:
+        provider_inputs = []
+
+        def fake_provider(jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+            provider_inputs.append(jobs)
+            return [{"job_id": job["job_id"], "title": job.get("title"), "hit": True, "stage": "confirmation"} for job in jobs]
+
+        decisions = apply_prefilter_to_decisions(
+            [
+                {
+                    "job_id": "1",
+                    "title": "Backend Developer",
+                    "location": "Lund, Skåne County, Sweden",
+                    "description": "Partner teams are in Malmö and Kristianstad.",
+                    "prefilter_pass": True,
+                }
+            ],
+            fake_provider,
+        )
+
+        self.assertEqual([[job["job_id"] for job in jobs] for jobs in provider_inputs], [["1"]])
+        self.assertEqual(decisions[0]["stage"], "confirmation")
+
+    def test_apply_prefilter_accepts_custom_empty_location_exclusion_list(self) -> None:
+        provider_inputs = []
+
+        def fake_provider(jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+            provider_inputs.append(jobs)
+            return [{"job_id": job["job_id"], "title": job.get("title"), "hit": True, "stage": "confirmation"} for job in jobs]
+
+        decisions = apply_prefilter_to_decisions(
+            [
+                {
+                    "job_id": "1",
+                    "title": "Backend Developer",
+                    "location": "Malmo, Skåne County, Sweden",
+                    "prefilter_pass": True,
+                }
+            ],
+            fake_provider,
+            excluded_locations=(),
+        )
+
+        self.assertEqual([[job["job_id"] for job in jobs] for jobs in provider_inputs], [["1"]])
+        self.assertEqual(decisions[0]["stage"], "confirmation")
+
     def test_openai_prefiltered_two_stage_decisions_skips_openai_when_all_jobs_fail_prefilter(self) -> None:
         def fake_post(url, payload, headers):
             raise AssertionError("OpenAI should not be called for prefilter-rejected jobs")

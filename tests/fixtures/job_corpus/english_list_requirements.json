@@ -12,9 +12,9 @@
   "expected": {
     "requirements_text": "Basic qualifications\nExperience building Python backend services.\nComfortable with APIs, tests, and production support.",
     "requirements_extraction_method": "pattern",
-    "prefilter_pass": true,
-    "prefilter_positive_matches": ["engineer", "backend", "platform", "python"],
-    "prefilter_negative_matches": [],
+    "prefilter_pass": false,
+    "prefilter_positive_matches": [],
+    "prefilter_negative_matches": ["Malmö"],
     "mock_hit": false
   }
 }

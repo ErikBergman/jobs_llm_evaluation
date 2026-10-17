@@ -1,5 +1,7 @@
 # jobs_llm_evaluation
 
+[![Keyway Secrets](https://www.keyway.sh/badge.svg?repo=ErikBergman/jobs_llm_evaluation)](https://www.keyway.sh/vaults/ErikBergman/jobs_llm_evaluation)
+
 Scrape public LinkedIn job ads, store each scrape under `results/discard/<timestamp>/`, then run a matcher that separates likely matches into `results/hits/<timestamp>/`.
 
 ## Scrape jobs
@@ -12,14 +14,14 @@ python3 linkedin_guest_jobs.py --card-limit 100 --detail-limit 100 --max-pages 1
 
 The scraper writes a timestamped JSON file under `results/discard/` by default, or under `results/waiting_room/` in the scheduled workflow. Each job includes local prefilter metadata (`prefilter_pass`, reason, positive matches, and negative matches). OpenAI evaluation skips jobs rejected by this local prefilter and writes them as discards without an API call.
 
-Local prefilter keywords can be overridden with a private matching config:
+Local prefilter keywords and metadata-only location exclusions can be overridden with a private matching config:
 
 ```bash
 cp job_matching.template.jsonc job_matching.json
 python3 linkedin_guest_jobs.py --matching-config job_matching.json --card-limit 100 --detail-limit 100 --max-pages 10
 ```
 
-If `--matching-config` is omitted, `linkedin_guest_jobs.py` automatically uses `job_matching.json` when it exists in the working directory. Otherwise it keeps the built-in defaults.
+If `--matching-config` is omitted, `linkedin_guest_jobs.py` automatically uses `job_matching.json` when it exists in the working directory. Otherwise it keeps the built-in defaults. The `prefilter.excluded_locations` list checks only the scraped `location` field, not the job description; set it to `[]` to disable location exclusions.
 
 ## Classify latest scrape
 

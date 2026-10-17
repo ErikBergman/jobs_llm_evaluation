@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from html import unescape
@@ -145,6 +146,7 @@ class PrefilterConfig:
     positive_keywords: tuple[str, ...]
     negative_keywords: tuple[str, ...]
     negative_categories: dict[str, str]
+    excluded_locations: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -152,10 +154,24 @@ class MatchingConfig:
     prefilter: PrefilterConfig
 
 
+DEFAULT_EXCLUDED_LOCATIONS = (
+    "Malmö",
+    "Helsingborg",
+    "Kristianstad",
+    "Eslöv",
+    "Hässleholm",
+    "Staffanstorp",
+    "Landskrona",
+    "Trelleborg",
+    "Ängelholm",
+    "Lomma",
+    "Kävlinge",
+)
 DEFAULT_PREFILTER_CONFIG = PrefilterConfig(
     positive_keywords=DEFAULT_PREFILTER_POSITIVE_KEYWORDS,
     negative_keywords=DEFAULT_PREFILTER_NEGATIVE_KEYWORDS,
     negative_categories=DEFAULT_PREFILTER_NEGATIVE_CATEGORIES,
+    excluded_locations=DEFAULT_EXCLUDED_LOCATIONS,
 )
 
 
@@ -230,6 +246,21 @@ def unique_preserving_order(values: Iterable[str]) -> list[str]:
     return output
 
 
+def normalize_location_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def excluded_location_name(location: object, excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS) -> str | None:
+    if not isinstance(location, str) or not location.strip():
+        return None
+    normalized_location = normalize_location_text(location)
+    for excluded_location in excluded_locations:
+        if normalize_location_text(excluded_location) in normalized_location:
+            return excluded_location
+    return None
+
+
 def keyword_matches(text: str, patterns: Iterable[tuple[str, re.Pattern[str]]]) -> list[str]:
     return [keyword for keyword, pattern in patterns if pattern.search(text)]
 
@@ -272,6 +303,15 @@ def prefilter_job(
     config: PrefilterConfig | None = None,
 ) -> dict[str, object]:
     config = config or DEFAULT_PREFILTER_CONFIG
+    excluded_location = excluded_location_name(job.get("location"), config.excluded_locations)
+    if excluded_location is not None:
+        return {
+            "prefilter_pass": False,
+            "prefilter_reason": f"Rejected excluded location: {excluded_location}",
+            "prefilter_positive_matches": [],
+            "prefilter_negative_matches": [excluded_location],
+        }
+
     positive_patterns = prefilter_positive_patterns(config)
     negative_patterns = prefilter_negative_patterns(config)
     fields = prefilter_text_fields(job)
@@ -685,17 +725,18 @@ def default_matching_config() -> MatchingConfig:
             positive_keywords=DEFAULT_PREFILTER_CONFIG.positive_keywords,
             negative_keywords=DEFAULT_PREFILTER_CONFIG.negative_keywords,
             negative_categories=dict(DEFAULT_PREFILTER_CONFIG.negative_categories),
+            excluded_locations=DEFAULT_PREFILTER_CONFIG.excluded_locations,
         )
     )
 
 
-def string_list_from_config(value: object, field_name: str) -> tuple[str, ...]:
+def string_list_from_config(value: object, field_name: str, allow_empty: bool = False) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise ValueError(f"{field_name} must be a list of strings")
     if not all(isinstance(item, str) for item in value):
         raise ValueError(f"{field_name} must be a list of strings")
     keywords = tuple(item.strip() for item in value if item.strip())
-    if not keywords:
+    if not keywords and not allow_empty:
         raise ValueError(f"{field_name} must contain at least one string")
     return keywords
 
@@ -722,6 +763,7 @@ def matching_config_from_dict(data: dict[str, object]) -> MatchingConfig:
     positive_keywords = DEFAULT_PREFILTER_CONFIG.positive_keywords
     negative_keywords = DEFAULT_PREFILTER_CONFIG.negative_keywords
     negative_categories = dict(DEFAULT_PREFILTER_CONFIG.negative_categories)
+    excluded_locations = DEFAULT_PREFILTER_CONFIG.excluded_locations
 
     if "positive_keywords" in prefilter_data:
         positive_keywords = string_list_from_config(prefilter_data["positive_keywords"], "prefilter.positive_keywords")
@@ -731,12 +773,19 @@ def matching_config_from_dict(data: dict[str, object]) -> MatchingConfig:
         negative_categories.update(
             string_mapping_from_config(prefilter_data["negative_categories"], "prefilter.negative_categories")
         )
+    if "excluded_locations" in prefilter_data:
+        excluded_locations = string_list_from_config(
+            prefilter_data["excluded_locations"],
+            "prefilter.excluded_locations",
+            allow_empty=True,
+        )
 
     return MatchingConfig(
         prefilter=PrefilterConfig(
             positive_keywords=positive_keywords,
             negative_keywords=negative_keywords,
             negative_categories=negative_categories,
+            excluded_locations=excluded_locations,
         )
     )
 

@@ -75,6 +75,21 @@
       "säljare": "sales",
       "butik": "retail",
       "kundcenter": "customer service"
-    }
+    },
+    // Checked only against the scraped location metadata field, never against the job description.
+    // Set to [] to disable location exclusions.
+    "excluded_locations": [
+      "Malmö",
+      "Helsingborg",
+      "Kristianstad",
+      "Eslöv",
+      "Hässleholm",
+      "Staffanstorp",
+      "Landskrona",
+      "Trelleborg",
+      "Ängelholm",
+      "Lomma",
+      "Kävlinge"
+    ]
   }
 }

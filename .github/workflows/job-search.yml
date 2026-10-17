@@ -217,6 +217,10 @@ jobs:
             echo "Job profile file is required when JOB_MATCHER_MODE=openai: ${JOB_PROFILE_PATH}"
             exit 1
           fi
+          matching_config_args=()
+          if [[ -f "${RUNTIME_RESULTS_DIR}/job_matching.json" ]]; then
+            matching_config_args+=(--matching-config "${RUNTIME_RESULTS_DIR}/job_matching.json")
+          fi
 
           set +e
           python3 match_jobs.py \
@@ -226,6 +230,7 @@ jobs:
             --match-level "$JOB_MATCH_LEVEL" \
             --openai-model "$OPENAI_MODEL" \
             --llm-limit "$JOB_LLM_EVALUATION_LIMIT" \
+            "${matching_config_args[@]}" \
             --job-profile "$JOB_PROFILE_PATH" 2>&1 | tee classify.log
           classify_status="${PIPESTATUS[0]}"
           set -e

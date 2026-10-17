@@ -28,6 +28,7 @@ from linkedin_guest_jobs import (
     load_search_config,
     load_seen_job_ids,
     main,
+    matching_config_from_dict,
     parse_cheat_job_ad,
     parse_job_detail,
     prefilter_job,
@@ -187,6 +188,7 @@ class SearchUrlTests(unittest.TestCase):
             "negative_categories": {
               "manager": "management"
             },
+            "excluded_locations": ["Malmö"],
           },
         }
         """
@@ -203,6 +205,22 @@ class SearchUrlTests(unittest.TestCase):
         self.assertEqual(relevant["prefilter_positive_matches"], ["rust"])
         self.assertFalse(irrelevant["prefilter_pass"])
         self.assertEqual(irrelevant["prefilter_reason"], "Rejected obvious management role: manager")
+        self.assertEqual(config.prefilter.excluded_locations, ("Malmö",))
+
+    def test_matching_config_can_disable_location_exclusions(self) -> None:
+        config = matching_config_from_dict({"prefilter": {"excluded_locations": []}})
+
+        decision = prefilter_job(
+            {
+                "title": "Backend Python Developer",
+                "location": "Malmo, Sweden",
+                "description": "Build integrations.",
+            },
+            config=config.prefilter,
+        )
+
+        self.assertTrue(decision["prefilter_pass"])
+        self.assertIn("python", decision["prefilter_positive_matches"])
 
     def test_load_seen_job_ids_reads_nested_result_jsons(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -579,6 +597,35 @@ class SearchUrlTests(unittest.TestCase):
                 "location": "Lund",
                 "description": "Build integrations.",
                 "source_searches": ["geo-only"],
+            }
+        )
+
+        self.assertTrue(decision["prefilter_pass"])
+        self.assertIn("python", decision["prefilter_positive_matches"])
+
+    def test_prefilter_rejects_excluded_location_metadata_only(self) -> None:
+        decision = prefilter_job(
+            {
+                "title": "Backend Python Developer",
+                "company": "Example AB",
+                "location": "Malmo, Skåne County, Sweden",
+                "description": "Build integrations.",
+                "source_searches": ["python"],
+            }
+        )
+
+        self.assertFalse(decision["prefilter_pass"])
+        self.assertEqual(decision["prefilter_reason"], "Rejected excluded location: Malmö")
+        self.assertEqual(decision["prefilter_negative_matches"], ["Malmö"])
+
+    def test_prefilter_does_not_reject_excluded_location_in_description(self) -> None:
+        decision = prefilter_job(
+            {
+                "title": "Backend Python Developer",
+                "company": "Example AB",
+                "location": "Lund, Skåne County, Sweden",
+                "description": "Collaborate with teams that also have offices in Malmö and Kristianstad.",
+                "source_searches": ["python"],
             }
         )
 

@@ -11,11 +11,14 @@ import os
 import re
 import shutil
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from linkedin_guest_jobs import DEFAULT_MATCHING_CONFIG_PATH, load_matching_config
 
 
 ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
@@ -37,6 +40,19 @@ OPENAI_MATCH_LEVEL_LABELS = {
     MATCH_LEVEL_GOOD: "good match",
     MATCH_LEVEL_UNICORN: "unicorn",
 }
+DEFAULT_EXCLUDED_LOCATIONS = (
+    "Malmö",
+    "Helsingborg",
+    "Kristianstad",
+    "Eslöv",
+    "Hässleholm",
+    "Staffanstorp",
+    "Landskrona",
+    "Trelleborg",
+    "Ängelholm",
+    "Lomma",
+    "Kävlinge",
+)
 OPENAI_TRIAGE_BASE_OUTPUT_TOKENS = 160
 OPENAI_TRIAGE_OUTPUT_TOKENS_PER_JOB = 120
 OPENAI_TRIAGE_MIN_OUTPUT_TOKENS = 256
@@ -930,12 +946,35 @@ def job_source_searches(job: dict[str, Any]) -> list[str]:
     return ["unknown"]
 
 
-def job_prefilter_passes(job: dict[str, Any]) -> bool:
+def normalize_location_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
+def excluded_location_name(location: object, excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS) -> str | None:
+    if not isinstance(location, str) or not location.strip():
+        return None
+    normalized_location = normalize_location_text(location)
+    for excluded_location in excluded_locations:
+        if normalize_location_text(excluded_location) in normalized_location:
+            return excluded_location
+    return None
+
+
+def job_prefilter_passes(job: dict[str, Any], excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS) -> bool:
+    if excluded_location_name(job.get("location"), excluded_locations) is not None:
+        return False
     return job.get("prefilter_pass") is not False
 
 
-def prefilter_rejection_decision(job: dict[str, Any]) -> dict[str, Any]:
+def prefilter_rejection_decision(
+    job: dict[str, Any],
+    excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS,
+) -> dict[str, Any]:
     reason = job.get("prefilter_reason")
+    excluded_location = excluded_location_name(job.get("location"), excluded_locations)
+    if excluded_location is not None:
+        reason = f"Rejected excluded location: {excluded_location}"
     if not isinstance(reason, str) or not reason.strip():
         reason = "Rejected by Eval 1: Keywords."
     return {
@@ -946,23 +985,26 @@ def prefilter_rejection_decision(job: dict[str, Any]) -> dict[str, Any]:
         "matcher": "prefilter",
         "stage": "prefilter",
         "prefilter_positive_matches": job.get("prefilter_positive_matches", []),
-        "prefilter_negative_matches": job.get("prefilter_negative_matches", []),
+        "prefilter_negative_matches": [excluded_location]
+        if excluded_location is not None
+        else job.get("prefilter_negative_matches", []),
     }
 
 
 def apply_prefilter_to_decisions(
     jobs: list[dict[str, Any]],
     decisions_provider: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+    excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS,
 ) -> list[dict[str, Any]]:
     passing_jobs: list[dict[str, Any]] = []
     passing_indexes: list[int] = []
     decisions: list[dict[str, Any] | None] = [None] * len(jobs)
     for index, job in enumerate(jobs):
-        if job_prefilter_passes(job):
+        if job_prefilter_passes(job, excluded_locations):
             passing_jobs.append(job)
             passing_indexes.append(index)
         else:
-            decisions[index] = prefilter_rejection_decision(job)
+            decisions[index] = prefilter_rejection_decision(job, excluded_locations)
 
     if passing_jobs:
         passing_decisions = decisions_provider(passing_jobs)
@@ -980,6 +1022,7 @@ def openai_prefiltered_two_stage_decisions(
     profile: str,
     match_level: str = DEFAULT_OPENAI_MATCH_LEVEL,
     model: str = DEFAULT_OPENAI_MODEL,
+    excluded_locations: Iterable[str] = DEFAULT_EXCLUDED_LOCATIONS,
     post_json: Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     normalized_level = normalize_openai_match_level(match_level)
@@ -993,6 +1036,7 @@ def openai_prefiltered_two_stage_decisions(
             model=model,
             post_json=post_json,
         ),
+        excluded_locations=excluded_locations,
     )
 
 
@@ -1528,9 +1572,19 @@ def main() -> int:
         default=int(env_llm_limit) if env_llm_limit else None,
         help="Maximum prefilter-passing jobs to send to the matcher from one waiting-room evaluation",
     )
+    parser.add_argument(
+        "--matching-config",
+        type=Path,
+        default=None,
+        help="Optional job matching JSON/JSONC config path for prefilter settings",
+    )
     args = parser.parse_args()
 
     try:
+        matching_config_path = args.matching_config
+        if matching_config_path is None and DEFAULT_MATCHING_CONFIG_PATH.exists():
+            matching_config_path = DEFAULT_MATCHING_CONFIG_PATH
+        matching_config = load_matching_config(matching_config_path)
         deferred_waiting_room_jobs: list[dict[str, Any]] = []
         if args.waiting_room:
             resolved_timestamp = args.timestamp or current_timestamp()
@@ -1560,6 +1614,7 @@ def main() -> int:
                 profile,
                 match_level=match_level,
                 model=args.openai_model,
+                excluded_locations=matching_config.prefilter.excluded_locations,
             )
         hits_path, discards_path, metadata_path, metadata = classify_file(
             input_path,
