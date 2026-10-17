@@ -1,0 +1,42 @@
+{
+  "started_at": "2026-10-17T12:57:58.348193+02:00",
+  "credential_variable": "OPENAI_JOBS_EVAL_READWRITE",
+  "credential_delivery": "keyway run --env development; value never saved",
+  "models": [
+    "gpt-5.4-mini",
+    "gpt-6-luna"
+  ],
+  "match_level": "good_match",
+  "reasoning_effort": "low",
+  "triage_max_output_tokens": 520,
+  "confirmation_max_output_tokens": 512,
+  "built_in_retry": "One retry at double output budget, only for empty output with max_output_tokens incomplete reason.",
+  "selection": "Purposive sample: QA plausible match, PCB skill mismatch, automation adjacent but specialist PLC/SCADA requirements. Two historical hits and one historical discard; historical buckets are not ground-truth labels.",
+  "execution": "Existing openai_two_stage_decisions; confirmation only for triage-selected ads. No keyword/location prefilter rerun. No queue/classify CLI invoked.",
+  "transport": "urllib with 120-second timeout, no hidden transport retries; explicit service_tier=default. All other payload parameters and prompts come from existing matcher.",
+  "profile_sha256": "ecf44e017ebd02452bcacbdd4b9ff29545bb8651919ed3354bdd8c747511cda2",
+  "matcher_sha256": "954cd7f571fcc676b44fe1c1af9a0d87d419e4c43a8032273094ac5e5e4cc89b",
+  "source_sha256": {
+    "results/hits/20260425_095859/linkedin_jobs_sample_hits.json": "72d666644c9eabf3f1f15ca505733827a235d6cee99f627c24eab82869af5ec5",
+    "results/discard/20260425_095859/linkedin_jobs_sample_discard.json": "c1aa7855d157f9fa5872cffb25f7967d94dc38b0ff271e9529032ea09c52fba9"
+  },
+  "rates_usd_per_million_tokens": {
+    "gpt-5.4-mini": {
+      "input": 0.75,
+      "cached": 0.075,
+      "write": 0,
+      "output": 4.5
+    },
+    "gpt-6-luna": {
+      "input": 0.1,
+      "cached": 0.01,
+      "write": 0.125,
+      "output": 0.5
+    }
+  },
+  "pricing_source": "https://developers.openai.com/api/docs/pricing",
+  "cache_accounting_source": "https://developers.openai.com/api/docs/guides/prompt-caching",
+  "pricing_verified_date": "2026-10-17",
+  "cost_formula": "((input-cached-write)*input_rate + cached*cached_rate + write*write_rate + output*output_rate)/1000000; output includes reasoning. Published standard short-context rates, before taxes/credits/contract discounts.",
+  "finished_at": "2026-10-17T12:58:16.335387+02:00"
+}

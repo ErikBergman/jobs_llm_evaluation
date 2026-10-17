@@ -1,0 +1,133 @@
+{
+  "id": "resp_0ecb4361be0e42b9006ad354b8e49087d1943ec7f36630f030",
+  "object": "response",
+  "created_at": 1792234680,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792234682,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": 520,
+  "max_tool_calls": null,
+  "model": "gpt-5.4-mini-2026-03-17",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_0ecb4361be0e42b9006ad354b9be2c87d1a12bfd93247f327a",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq01S6fDbQU-Kgcwxgq27mOG5tHdvler6cFwFuSLe9K0SrPEv8-9kRpsixeZ1gPhaeqyUeZL0cCI_kayRe1WcBtvkL1wy_5xpZkSXBZZdX7T1tPmt8nzOSBrp8dcqLlL-262Pi3BpD7yDIO2OP5hERM5fCI4zO-sBFN0MgA9MLUCFrD2hnYawjqbJRz_QbnyFEZsfuuVYKfNqwt7lOXNVoxn25B2O5NgcHUyGV2cJUIWdSFRrdCzYsQyBU1t24WACKADw90GIeF9UfTbQ1Q_MhRiGFCqSaCjY91KMxRpKuVaTiRv5UpUxNd2cccE5nKdSxKRZQ92Xi3Ew9DCOgJKThIdljVSDxKWsneQ_ZrMyud7VybTtKdQOgf26rEEDH-R42ctWroEeppzMbNdqTnHfXhmpaff4kZJy9d8gnwBsqI0e2uWifQ85NN4DLIel8oTjuL2GX7DFy1vOq62mYznfG5JNZ8Muvzd3N8n78uks0mKaeVsbmwsRz1CsfNsEbDMSNuj2wYjKra5TxmPNq6EINrbYQsLMWQarkpHt_p57zuP-Ja9DT7KQXrfUpk9z40NxUaSejXSLhV7fWV5ttsVWKn_DX8sqvie-eV95YqihhNt0jkgOzB409KI62Reirtm6z5LYe-Tkni3QZdoUbEZtTBwU3LdUQKT8UPOaGb7p_QeuOWtsCyoMxoQd1FN2RI6xEs80BxOMq6Uwc-qAmVn2RucYhwcy_2QiSaxDebPHgEN7W1uEfDvUaRwkFhlcBjjXo0ABS33qYyBVb-SSeq5IdauYX2VK3GgHWLtNiuJp90Ogm2qfJ-xmpeHD0emGh1-7MUldetAStr6MvCCVQzfgWTY9MWKGQjzXC1ur2AgEcAhD6IPBjnc8CjjBB70YlR9ENgjaw3Vs6oZlJs4ddBSY3TAJniokF8lxxohk47VL3ebkKj8jjR9uL3m53gWqzy11P1DP1b8uVIsDCH4Ym9rwHGQI8KfSjAKY_Gmqh3eSx565CtjsdSUCh6M5Vf9dT5S3RXwTGcUnbM996UYtgvNy6tiLIRFtlsFDYBlzwZ6UkYDZx6GQVsPrve-xDoIGZSregXaOhyI1VQiYM5JQWW-h7e-XNNCwQfE5RZkzVV1qUCEovu-gc2Zy_8M8llufJLVve3cchZyDE5SUYEx4-z2XAMEn2NIy6813F1w6TiT-DclQ-zpozKTbFsuXGMWOveZNe-BPm_GCh4uOMM6PdhHbBW0XHUdayOBeEYibZjEsJIhBdDKlPQLmTg4_l8ugXvKTwdUSsBcrFEXG84CEAlm7NWSEqxzp0MXlwazYv8B5u9KHxSrxV99_B_m4ZXg4Vk_5UEcDd-pw4RPTKvuliA-e7LCF5HidSzUv-MSFDFgmEf4nuoWmHDEndOGw8p1j3YXGPewfoBvUg7vCIOpigcGXm-P9cfPqnTcBB4FOqJ_E7ehbVTwG_yp1owCZ_CBi3eFDaof1daTD1ioD-nzYQMYHxRvKwaSPFHfQdMxFhMJRj94ZOcusZJCPjlVUJUoZ4tRFHWMjZdGAZ6wqDjXnS6rhDl2iHLXp-0J683vjbnyVJxtx8ld0SB2AJ9bi7-8unrL8sOjaYHwCSUkYc8VHHqReq7XW0IdX_SlpAB8PsQtmmdgNB8KGWc-_Yi3gtIuHnu6GiS7GSgjhj8e8MMYBTa6v8ruf5XCt8Y0e3Lb99U_TMduZp1E7coGETwS5x28knoWxXxxkoq-1_JhilwdjX_Du6Zn3R1ZyVt5l9-ATjwf1_-YCdZL3iOE-rV_2wi0Txx4a__T6qN1vB7znFYHXFaGxJ7nXGq_rx03Yw2-8uzjQ1g2iIVt4xty5fTgsrrLczz7-0CUkASchqTLh5II4qy-GIElXYyHih6ne9M22iweziv1njZkJoQ6Ri-LVooiyLl4jSyGcDl10rZi8bmNPnWXRfK0-F9_N3zcScJKRK0-33S_Kqc5pvvF_e9LSxHsvdVdgKVvCLcwIEG8eemmbGoDGZggsF9ib_JTY7EBb8QfH43xOPtMf5n6cvWzwVxCx04L7Wcr1n0XsBpGV1tPj-awmyV0m_-TtJbsfW8YXeJsTzIgVsGvmJmIdW-uLrDwTEJjVatObbvsL8T-poYG5TuAiW-R2ZYrFrJBxA1Pam-MwOU0Yy5ZEExAjKmKDfDg2lMPSbUaEmqe20ShwBRKLR7vvf4GCzPi1mKh7eMD-mG-rp_uc4VfUPvXu0QLpj9LaG4wrf0Na8S9fyvV0qu9m2c0XITDT61-YgKVhLo16TMmItGSM3miYjqeW-PbxTu2rQ8D8c3vdrZakXbHFJbhpJUCj8CaXc5bBOq41tMJxtUPA110v2nzSBSbZGgkKkcojsFC_52Wwqb7Jbm0-at6tazePfafApB6dUj1UpoS8A1stYklJDPkj0xwRf2yn3CUxqPtglnCgP9oz6dSgPntVXChjXXFMFUoR0n9jxWKfN4U9xZ45mefFRAXPHOu6GHxrQsVO2dqE_aNT0L5R8fohH73AggIm_F1naWFH1IoA3SZqN7kvpid8=",
+      "summary": []
+    },
+    {
+      "id": "msg_0ecb4361be0e42b9006ad354ba669087d197ff44dc14808486",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"candidates\":[{\"candidate_id\":\"4405304862\",\"reason\":\"His production validation mindset, test automation experience, Python/Git background, and cross-team communication make this a plausible QA/automation-adjacent match worth deeper review.\"}]}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": "job-profile:ecf44e017ebd0245",
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "current_turn",
+    "effort": "low",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "job_good_match_triage",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "candidate_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "candidate_id",
+                "reason"
+              ]
+            }
+          }
+        },
+        "required": [
+          "candidates"
+        ]
+      },
+      "strict": true
+    },
+    "verbosity": "low"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 10937,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens": 143,
+    "output_tokens_details": {
+      "reasoning_tokens": 80
+    },
+    "total_tokens": 11080
+  },
+  "user": null,
+  "metadata": {}
+}

@@ -1,0 +1,133 @@
+{
+  "id": "resp_01f98fcb69196f6c006ad354c0167087d1a1c8c6f4125b3764",
+  "object": "response",
+  "created_at": 1792234688,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792234691,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": null,
+  "max_output_tokens": 520,
+  "max_tool_calls": null,
+  "model": "gpt-6-luna",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_01f98fcb69196f6c006ad354c1625887d19e64a75173d832a2",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq01TDwnZw_-w9WK4wvLeO9W6DUo5fGFs9vFqxaC-Y3-_c6BVF1CKwdrrfpTefcnYcv2uil5NM9mUu4Hkc6mYcpY9dVgXCOnRwsFZMSPhyFOHW7yyuBYm-ydpdI9cH7jybQPVpVvg3vJqSDhr0Wh7JCyfs_CzJUbo-NlznvwuvVm3B2d1IlhwqraMBO5PmeJnhWAY66e8wNR-XDIwLNz4sSo8vj8hvLc7SrEz6kYtjIu_KPkmHr9eCpImMHw2DAoY6V7Rnd-7B1BTYR_CzM7iq1kPDhGWn3BRmMDAtJm93MWr9pYzfxrT1hAUawrmOV-Mo2WSSHh5naW8OPNQtnyxc59E1N6srUJYQL7J3Z_28x0nWCdk_M6Fc_2sTDCvTegQlEwgpP9VoSR885XsupHD-aHX1EMFJgSVy1OvKYaR3_VoBQ4IQqX8IqC8rpg3o6eY5kVw59n-prP3VXi9Wq99CDp0EiSxJ9Ihl9R7L42R1EKdY-zgwmkAWN-yJ1PbWTJq_bIbopox-LrRRWXQ9hyg0K4lS88Ctanxscs1j_sMbsJLh-l8hcJ6NH_B15V6-UyGar4Mxpf4bC9GGhrOCMrRhjtXgRLBRLnIoV9Z1a_KgFhB2paGuNvvqzuXh9Oiojw2pJpanhjM75z_Jp-hgJpNy2YIHa83seHxejcjq_YhJ6kO-jc4hq6MbBDkUXMG9dwokDqkcjd8RF2TMI6MG4eDS0PWYzBRs4NHOpzSDCHMXchIN4PXNpPJfBeaNbmu1qD_UEXt2Wh95Vts0Qrc5gcjEprOm_pP8-L_ddJfXiRJcFRkXJSzB7jtWeCJMKUU1KkgrmJNu775gg2yqq3q-9erCNl5S4KbbZi-m4mFhvWpatIx5MH4jdZRGXU1qSbBHx4aB1x2L-EsdWE2Di7s13FjOUdxEOswcX_0p34xvVPiDEblqtEFmlYoAN9udDorFUkST10CMx5rBUbA7wPkKx7OirUMpJcrTuz9XeY9sXeDU_ytSiirAavKMC8yechR6hVBd9AHXrZDif9vl6pqk7zIYD9275U7BkQpHSTNgwQiu8ceRovVyLq09dA87cy3p3cst8q-RM0m2lchu25ISnhXRuZYMRSovbRSqVK49Kh4EOdWz4CVzmXku9gkhXiCjxRN5MrCywopz4K6BEOn_ib5vAHVfBpefDTIltYVBe1bp76ULpV3h0trdbtgN7p15oVIONgc2-8-pdjSaZfOaux_Skhf008xL3ej1TJxbytbBrV5J0PRIOfVt4aC0o5xEAN1GRA6uruRIIzUB0YsezvG3Qj6UB-7G38ILzVS3aV7p_Y2mXHFRMwlpx9nF9fOc8ivveY2GHsnwly6bgDhdXK86kH2UQBHyM44bWY8z5tvRdc6CIjRANOjlT3WLKVlq2kJ59M0RwvxuXmQpvfoksGOXJdGr-4qBel2wH6VW5WuibHZvb-XVT1W-DlCSB6XMczhxaDHqjIFX6zrU3bOwoQa-wMQaL002h_589fRJM_V5cfPcATn-ynQcuGZ3Gwl8TnPoqPOB5zVwZxpj1n6QvQF32lJIhfNKfclUXMM67T2KkD9g37ucx-ou_B06UTk6HFWzAtLjPO5UIxrIO0gJkq8QMq9DFPXijFPeHzoeSXKpTSlQEM1CTft8BlZiaRHJWScEe6yhj2C3eMKYg6lRPs763h7drf8xrnuCY6v6n-jZpXoe0kAkibSiSgPnBoXUwfEZxZTBDZA5pqMEtIfYQb3StLoxGWJIrbuKKGnODairYne7QboDODj_SA73RGvMzLzWCSjI9HaZjF5aF0FsKV7fKsO0TmASXHa9Mx2OgC1Nq_sY8tne3VG6Vf_-qFEtWXxp7pIe7yCi8U3jnGEpt5LuBu_fvoCIt2c_8Eopf2TQv4q_c0at1nWatwCCUk8eiGixAqfDgOGcfLy51zSz6WKdOlg2MCtA3x6inhKscqnF4eRzvnbfHt98SvNdiqGy35xgsa7Q0fw8TFQX-Pla93c5tpPXxpDWUKcHDhN1X1lRfR4hFdwRQP7VwW_mirc5LvnVespVnwtekahivLlq7zGth41LoZ8AeNJPax1oMJcEaeRgVedt1IzuEYKGKiKaRhTNkpQrGBjpJtx55VGlugkZCsYrt3aRr_tNOThAzyGSBXssli6t5CVo-rPNU0Rk4z5hYad73ptoKDA0OHxWu-i0se1dnMILWLBW4EHQZ0EBVaankCp7mjKYs7cPbt8JrjQ227zMRrqr6jTjohPa7x92ndx9JnzDysm-WhDZrCnqjwvrgbzypK_cWqfVdOGs5caoRu3l49Mheb0uWJTG4WbwbK_LW3FNfXp-3xf7rGxXOK4B1dh7SsTrkryWBE-fg-xpHqwxwtn6iN-1EofYCFsX19I2Y8smj6J7zdoKMR3kLPWn1tLwi3OMjbwdd-BzVk79NqM7_j8q96cG1EIvFMtdY8RgS8zmTgmMFVwNyZTHJTforY1uSdVRC_BUChmhENQhK0etfn7ZBinIJIk19gyneZO2gw_mihXn7O9Bg4fmBD4S0IAc7gYRimspTejdEeJ_zTEUY5eBFIqcfsZ4mpvHIwqBwyvrr7nzGC9TGo97RFiV3DiMSvXZkX4D0BhfBqg_pq9j-qowk_iF4mZPNeYpPBEYf0U3munhzqvitTgkcvSwx4DiJ1D8POCi6Unb-4-6pBeMtsNr5kKtJJyPigJDJnxTU2OIXyXa6NyV8KrHl3aATcYCF8DjiHUvVyiqw7kAOIS7NzXGHo3o2-mq6AFOOAtYPmxRjTszr7qWczB4CiKlydTLbFlPAgiXZ_KdGEi_cyP98m9LNn8Nve_w4h0Ao34aJivrf1yi4h29O4EaezlsVPa4KDivoihah806KZjGqSxMqsMnYUWE59hms2NilAEWi0htC5gCVWHhcr5fhpkySRLAgrpnV4kD_OH5WEfbNlMzQxFckR_-yWS-KOIxw8SL4X_npZeB_KPhtFN1sgYH0n4fwOhbYh3CVfO9Evv_6s3MYXb0wyLYnZNVciIc-qa7c7_wOJC-UNb4rBfPPJfbWaBCpsrEE-bWHQ7YsSPYV0kp",
+      "summary": []
+    },
+    {
+      "id": "msg_01f98fcb69196f6c006ad354c2b60c87d1a0b3b3f160bb0fef",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"candidates\":[{\"candidate_id\":\"4405304862\",\"reason\":\"His production-system testing, validation, Python automation, engineering background, and clear cross-team communication make this QA role worth reviewing despite its C# and hardware-testing gaps.\"}]}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": "job-profile:ecf44e017ebd0245",
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "low",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "job_good_match_triage",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "candidate_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "candidate_id",
+                "reason"
+              ]
+            }
+          }
+        },
+        "required": [
+          "candidates"
+        ]
+      },
+      "strict": true
+    },
+    "verbosity": "low"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 10937,
+    "input_tokens_details": {
+      "cache_write_tokens": 10934,
+      "cached_tokens": 0
+    },
+    "output_tokens": 186,
+    "output_tokens_details": {
+      "reasoning_tokens": 123
+    },
+    "total_tokens": 11123
+  },
+  "user": null,
+  "metadata": {}
+}

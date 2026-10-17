@@ -1,0 +1,12 @@
+{
+  "sources_match_hashes": true,
+  "profile_unchanged": true,
+  "matcher_unchanged": true,
+  "queues_and_config_metadata_unchanged": true,
+  "credential_available_for_validation": true,
+  "no_api_key_in_saved_artifacts": true,
+  "python_syntax_valid": true,
+  "all_metered_responses_saved": true,
+  "all_decisions_complete": true,
+  "token_totals_match_every_returned_response": true
+}

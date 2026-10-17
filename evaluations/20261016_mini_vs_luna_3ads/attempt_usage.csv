@@ -1,0 +1,9 @@
+sequence,model,stage,job_id,attempt,is_retry,max_output_tokens,status,input_tokens,ordinary_input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,cost_usd
+1,gpt-5.4-mini,triage,,1,False,520,URLError,,,,,,,
+2,gpt-6-luna,triage,,1,False,520,URLError,,,,,,,
+3,gpt-5.4-mini,triage,,2,True,520,HTTPError,,,,,,,
+4,gpt-6-luna,triage,,2,True,520,HTTPError,,,,,,,
+5,gpt-5.4-mini,triage,,3,True,520,completed,10937,10937,0,0,143,80,0.00884625
+6,gpt-5.4-mini,confirmation,4405304862,1,False,512,completed,9554,9554,0,0,271,208,0.008385
+7,gpt-6-luna,triage,,3,True,520,completed,10937,3,0,10934,186,123,0.00146005
+8,gpt-6-luna,confirmation,4405304862,1,False,512,completed,9554,3,0,9551,53,0,0.001220675

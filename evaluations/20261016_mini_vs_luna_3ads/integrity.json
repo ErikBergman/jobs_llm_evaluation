@@ -1,0 +1,6 @@
+{
+  "unchanged": true,
+  "verification": "File size, mtime_ns, and mode across results, root Python/config files, workflows, profile, and README. ctime is captured but excluded because file-provider materialization changes it on reads.",
+  "changed_paths": [],
+  "protected_file_count": 34
+}

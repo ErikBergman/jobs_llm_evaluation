@@ -1,0 +1,5 @@
+# Keep private candidate-profile prompts and generated ad data local, consistent
+# with the repository's existing ignores for job_profile.txt and results/.
+*/request_*.json
+*/selected_ads.json
+*/protected_*.json
