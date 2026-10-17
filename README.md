@@ -76,7 +76,7 @@ GitHub Actions usage:
 - add repository secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for scheduled summaries
 - add repository variable `JOB_MATCHER_MODE=openai`
 - optionally add repository variable `JOB_MATCH_LEVEL=good-match` (`decent-match`, `good-match`, or `unicorn`)
-- optionally add repository variable `OPENAI_MODEL=gpt-5.4-mini`
+- optionally add repository variable `OPENAI_MODEL` to override the default `gpt-6-luna`
 - keep `job_profile.rtf` in the configured Koofr memory folder
 
 If `JOB_MATCHER_MODE` is unset, the workflow keeps using the free mock matcher.

@@ -32,7 +32,7 @@ Historical ads without a trustworthy collection date, or with a future collectio
 | `max_calls` | 20 | Maximum attempted comparisons per invocation; excess ads are retained. |
 | `excerpt_chars` | 1600 | Bound each ad's description excerpt, including a requirements/end excerpt for long descriptions. Title, employer, location, URL and requisition fields are also bounded. |
 | `max_output_tokens` | 512 | Hard request output limit, including reasoning. No automatic retries or larger-budget retries. |
-| `model` | `gpt-5.4-mini` | Uses the app's existing small model family, independently configurable. |
+| `model` | `gpt-6-luna` | Uses the app's existing small model family, independently configurable. |
 | `employer_aliases` | Selected verified name variations | Conservative matching without assuming all similarly named employers are identical. |
 
 No recent employer candidate means no API call. All shortlisted older ads are compared in one request rather than one call per pair. Cached positive, negative and uncertain decisions make no new calls; model, prompt and compared excerpt changes invalidate the cache. Cache entries expire after the lookback window plus a day and are capped at 10,000 entries.

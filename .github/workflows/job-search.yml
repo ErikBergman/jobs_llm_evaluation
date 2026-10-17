@@ -29,7 +29,7 @@ jobs:
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       JOB_MATCH_LEVEL: ${{ vars.JOB_MATCH_LEVEL || 'good-match' }}
       CHEAT_MODE: ${{ vars.CHEAT_MODE || 'false' }}
-      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-6-luna' }}
       RUNTIME_RESULTS_DIR: runtime_results
     steps:
       - name: Resolve schedule gates
@@ -190,7 +190,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           JOB_DEDUPLICATION_MODE: ${{ vars.JOB_DEDUPLICATION_MODE || 'openai' }}
-          JOB_DEDUPLICATION_MODEL: ${{ vars.JOB_DEDUPLICATION_MODEL || 'gpt-5.4-mini' }}
+          JOB_DEDUPLICATION_MODEL: ${{ vars.JOB_DEDUPLICATION_MODEL || 'gpt-6-luna' }}
         run: |
           python3 deduplicate_jobs.py \
             --results-root "$RUNTIME_RESULTS_DIR" \

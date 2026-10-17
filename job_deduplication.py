@@ -35,7 +35,7 @@ class DeduplicationConfig:
     max_calls: int = 20
     excerpt_chars: int = 1600
     max_output_tokens: int = 512
-    model: str = 'gpt-5.4-mini'
+    model: str = 'gpt-6-luna'
     employer_aliases: tuple = ()
 
     def company_key(self, name):
