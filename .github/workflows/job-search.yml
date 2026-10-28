@@ -192,10 +192,11 @@ jobs:
           JOB_DEDUPLICATION_MODE: ${{ vars.JOB_DEDUPLICATION_MODE || 'openai' }}
           JOB_DEDUPLICATION_MODEL: ${{ vars.JOB_DEDUPLICATION_MODEL || 'gpt-6-luna' }}
         run: |
+          set -o pipefail
           python3 deduplicate_jobs.py \
             --results-root "$RUNTIME_RESULTS_DIR" \
             --mode "$JOB_DEDUPLICATION_MODE" \
-            --model "$JOB_DEDUPLICATION_MODEL"
+            --model "$JOB_DEDUPLICATION_MODEL" 2>&1 | tee deduplicate.log
 
       - name: Classify waiting-room jobs
         if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
@@ -243,6 +244,10 @@ jobs:
           if [[ -n "$classified_input" ]]; then
             echo "classified_input=${classified_input}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Summarize job source audit
+        if: always() && steps.schedule_gate.outputs.run_job == 'true'
+        run: python3 job_source_audit.py --logs scrape.log employer_scrape.log deduplicate.log classify.log
 
       - name: Send Telegram summary
         if: always() && steps.schedule_gate.outputs.report_job == 'true'

@@ -27,6 +27,7 @@ from linkedin_guest_jobs import (
 from dataclasses import asdict, replace
 
 import job_deduplication as deduplication
+from job_source_audit import log_duplicate_jobs, log_found_jobs
 
 CONFIG_PATH = Path(__file__).with_name("employer_scraping.json")
 VOID_TAGS = set("area base br col embed hr img input link meta param source track wbr".split())
@@ -983,7 +984,7 @@ def index_sources(sources, results_root, matching_config, limit=25, max_pages=20
     jobs, audits = [], []
     for source in sources:
         client = client_factory(source["hosts"], delay, timeout)
-        audit = dict(source_id=source["id"], employer=source["employer"], status="ok", discovered=0,
+        audit = dict(source_id=source["id"], employer=source["employer"], url=source["url"], status="ok", discovered=0,
                      indexed=0, already_seen=0, location_filtered=0, location_unknown=0, expired=0,
                      selection_truncated=False, errors=[], location_review=[])
         try:
@@ -1038,9 +1039,19 @@ def index_sources(sources, results_root, matching_config, limit=25, max_pages=20
             audit["status"] = "blocked" if source['adapter'] == 'blocked' else "failed"
             audit["errors"].append({"url": source["url"], "message": str(exc)})
         audit["requests"] = client.requests
+        source_jobs = [job for job in jobs if job.get('source_id') == source['id']]
+        audit['prefilter_rejected'] = sum(job.get('prefilter_pass') is False for job in source_jobs)
+        audit['prefilter_passed'] = len(source_jobs) - audit['prefilter_rejected']
         audits.append(audit)
-        print(f"[{source['id']}] {audit['status']}: discovered={audit['discovered']} indexed={audit['indexed']} "
-              f"seen={audit['already_seen']} other_location={audit['location_filtered']} unknown_location={audit['location_unknown']} errors={len(audit['errors'])}", flush=True)
+        print(f"[source-scrape] source_id={source['id']!r} source={source['employer']!r} site={source['url']!r} "
+              f"status={audit['status']} discovered={audit['discovered']} new_ads={audit['indexed']} "
+              f"seen={audit['already_seen']} other_location={audit['location_filtered']} expired={audit['expired']} "
+              f"unknown_location={audit['location_unknown']} prefilter_passed={audit['prefilter_passed']} "
+              f"prefilter_rejected={audit['prefilter_rejected']} errors={len(audit['errors'])} "
+              f"selection_truncated={str(audit['selection_truncated']).lower()}", flush=True)
+        for error in audit['errors']:
+            print(f"[source-error] source={source['employer']!r} site={source['url']!r} "
+                  f"url={error.get('url')!r} reason={error.get('message')!r}", flush=True)
     return jobs, audits
 
 
@@ -1098,6 +1109,7 @@ def main(argv=None):
         config_path = DEFAULT_MATCHING_CONFIG_PATH
     jobs, audits = index_sources(sources, args.results_root, load_matching_config(config_path), args.limit,
                                  args.max_pages, args.page_size, args.request_delay, args.timeout)
+    log_found_jobs(jobs, include_summary=False)
     duplicates, dedup_audit = [], None
     if dedup_config:
         jobs, duplicates, dedup_audit = deduplication.filter_new_jobs(jobs, args.results_root, dedup_config)
@@ -1110,6 +1122,7 @@ def main(argv=None):
         if dedup_audit['error_kept']:
             print('[deduplication] Some comparisons unavailable; affected ads retained.')
     path = write_results(jobs, audits, args.results_root, args.results_bucket, duplicates, dedup_audit)
+    log_duplicate_jobs(duplicates)
     print(f"Wrote {path}")
     return 1 if any(a["status"] != "ok" for a in audits) else 0
 

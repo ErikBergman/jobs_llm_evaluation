@@ -11,6 +11,7 @@ from pathlib import Path
 
 import job_deduplication as dedup
 from match_jobs import is_unclassified_jobs_json, load_waiting_room_jobs
+from job_source_audit import log_duplicate_jobs
 
 
 def process_waiting_room(results_root, config, decider=None, now=None, dry_run=False):
@@ -59,6 +60,7 @@ def process_waiting_room(results_root, config, decider=None, now=None, dry_run=F
         dedup.atomic_json(path, revised)
     path = Path(results_root)/'deduplication'/stamp/'deduplication_metadata.json'
     dedup.atomic_json(path, audit)
+    log_duplicate_jobs(duplicates)
     return audit
 
 

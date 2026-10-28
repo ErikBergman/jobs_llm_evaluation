@@ -1,10 +1,12 @@
 import json
+import io
 import tempfile
 import unittest
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
 import deduplicate_jobs as cli
 import employer_jobs as employers
@@ -36,8 +38,14 @@ class IntegrationTests(unittest.TestCase):
     def test_shared_waiting_room_removes_only_newer_copy_then_classifies_once(self):
         self.save('waiting_room/20261015_100000/linkedin.json',[self.older])
         self.save('waiting_room/20261016_100000/employer_jobs.json',[self.new])
-        audit=cli.process_waiting_room(self.root,self.config,self.duplicate,NOW)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            audit=cli.process_waiting_room(self.root,self.config,self.duplicate,NOW)
         self.assertEqual(audit['duplicates'],1)
+        self.assertIn("[duplicate-discard] source='Axis'", output.getvalue())
+        self.assertIn("url='https://careers.example.org/jobs/employer:axis:new'", output.getvalue())
+        self.assertIn("duplicate_of='older' reason='Matching role-specific details.'", output.getvalue())
+        self.assertIn('discarded_duplicates=1', output.getvalue())
         waiting=load_waiting_room_jobs(self.root)
         self.assertEqual([j['job_id'] for j in waiting],['older'])
         archive=json.loads(next((self.root/'duplicates').rglob('duplicate_jobs.json')).read_text())

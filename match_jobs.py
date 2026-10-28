@@ -19,6 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from linkedin_guest_jobs import DEFAULT_MATCHING_CONFIG_PATH, load_matching_config
+from job_source_audit import format_source_evaluation_summary, job_log_context
 
 
 ENGINEER_WORD = re.compile(r"\bengineer\b", re.IGNORECASE)
@@ -1626,8 +1627,9 @@ def main() -> int:
             model=args.openai_model if args.matcher == "openai" else None,
             match_level=match_level if args.matcher == "openai" else None,
         )
+        jobs = load_jobs(input_path)
+        print(format_source_evaluation_summary(jobs, metadata["decisions"]))
         if args.matcher == "openai":
-            jobs = load_jobs(input_path)
             audits = load_search_audit(search_audit_path(input_path))
             print(format_search_evaluation_audit_table(audits, jobs, metadata["decisions"]))
         if args.waiting_room:
@@ -1638,10 +1640,11 @@ def main() -> int:
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    for decision in metadata["decisions"]:
+    for job, decision in zip(jobs, metadata["decisions"]):
         print(
             "[decision] "
-            f"job_id={decision.get('job_id')} "
+            f"{job_log_context(job)} "
+            f"outcome={'matched' if decision.get('hit') is True else 'discarded'} "
             f"eval_stage={decision_eval_stage_label(decision)!r} "
             f"hit={str(decision.get('hit')).lower()} "
             f"title={decision.get('title')!r} "

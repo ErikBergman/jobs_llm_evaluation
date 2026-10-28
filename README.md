@@ -145,7 +145,11 @@ Each matching run writes an audit file next to the discard output:
 results/discard/<timestamp>/linkedin_jobs_sample_match_metadata.json
 ```
 
-The workflow log also prints one `[decision]` line per job with the job ID, evaluation stage, hit value, title, and reason.
+The workflow log prints `[source-scrape]` summaries identifying each site that was actually scraped, with new-ad and prefilter counts. Employer imports also report previously seen ads, location/expiry skips, unresolved locations, source errors and truncation, including sources with no new ads. Employer scraping remains a separate command until it is added to the workflow.
+
+Each evaluated job has a `[decision]` line with its source (LinkedIn or company name), site, ad URL, job ID, matched/discarded outcome, evaluation stage and reason. `[source-evaluation]` totals split discards into prefilter, triage and confirmation rejections. These counts describe the evaluated batch, which may include ads queued by earlier scrapes. Confirmed cross-source duplicates are reported separately as `[duplicate-discard]` and `[source-duplicates]`.
+
+The **Job source audit** section of the Actions run summary collects the source totals and expandable job-level decisions from the current run's logs, even when a preceding step fails. Missing logs are shown as unavailable rather than interpreted as zero ads. These audit logs add no API calls and do not change matching or duplicate decisions.
 
 ## Open-Source TODO
 

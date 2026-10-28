@@ -1,10 +1,12 @@
 """Synthetic fixtures retain recruitment structures observed on 2026-10-16; no live HTTP in tests."""
 import json
+import io
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from contextlib import redirect_stdout
 
 import employer_jobs as e
 from linkedin_guest_jobs import default_matching_config
@@ -92,12 +94,18 @@ class EmployerIndexTests(unittest.TestCase):
             item('https://jobs.tetrapak.com/job/Lund-Old/1002/', extra='<g:expiration_date>2020-01-01</g:expiration_date>'),
             item('https://jobs.tetrapak.com/job/Pune-Engineer/1003/', 'Pune, IN', AD + '<p>Our headquarters is in Lund.</p>'),
         ])
-        jobs, audits = self.run_source('tetra-pak')
+        output = io.StringIO()
+        with redirect_stdout(output):
+            jobs, audits = self.run_source('tetra-pak')
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0]['source_job_id'], '1001')
         self.assertNotIn('&lt;', jobs[0]['description'])
         self.assertEqual(audits[0]['expired'], 1)
         self.assertEqual(audits[0]['location_filtered'], 1)
+        self.assertIn("[source-scrape] source_id='tetra-pak' source='Tetra Pak'", output.getvalue())
+        self.assertIn(f"site={source['url']!r}", output.getvalue())
+        self.assertIn('new_ads=1', output.getvalue())
+        self.assertIn('other_location=1 expired=1', output.getvalue())
 
     def test_workday_pagination_and_multilocation_details(self):
         source = self.sources['axis']

@@ -21,6 +21,8 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from job_source_audit import log_found_jobs
+
 
 LINKEDIN_SEARCH_URL = "https://www.linkedin.com/jobs/search-results/"
 GUEST_SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
@@ -1634,6 +1636,7 @@ def main() -> int:
     update_audits_with_prefilter_counts(search_audits, jobs)
 
     if not jobs:
+        print("[source-scrape] source='LinkedIn' site='linkedin.com' new_ads=0 prefilter_passed=0 prefilter_rejected=0")
         print(format_search_audit_table(search_audits, jobs))
         print("No new public job cards found.", file=sys.stderr)
         return 1
@@ -1646,7 +1649,7 @@ def main() -> int:
     write_search_audit(output_path, search_audits)
 
     print(f"Wrote {output_path}")
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    log_found_jobs(payload)
     print(format_search_audit_table(search_audits, jobs))
     return 0
 
