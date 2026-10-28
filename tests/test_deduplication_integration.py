@@ -153,6 +153,50 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('--results-root "$RUNTIME_RESULTS_DIR"',block)
         self.assertIn('JOB_DEDUPLICATION_MODE',block)
 
+    def test_workflow_imports_employers_into_shared_memory_before_one_duplicate_stage(self):
+        workflow=(Path(__file__).resolve().parents[1]/'.github/workflows/job-search.yml').read_text()
+        employer_step=workflow.index('- name: Scrape company career pages')
+        duplicate_step=workflow.index('- name: Deduplicate cross-source waiting-room jobs')
+        self.assertLess(workflow.index('python3 linkedin_guest_jobs.py \\'), employer_step)
+        self.assertLess(employer_step, duplicate_step)
+        block=workflow[employer_step:duplicate_step]
+        self.assertIn('--results-root "$RUNTIME_RESULTS_DIR"',block)
+        self.assertIn('--results-bucket waiting_room',block)
+        self.assertIn('--matching-config "${RUNTIME_RESULTS_DIR}/job_matching.json"',block)
+        self.assertIn('--deduplication-mode off',block)
+        self.assertIn('--allow-partial-sources',block)
+        self.assertIn('tee employer_scrape.log',block)
+        self.assertIn('!cancelled()',block)
+        self.assertIn("steps.memory.outcome == 'success'",block)
+        self.assertIn("steps.tests.outcome == 'success'",block)
+        self.assertNotIn("steps.schedule_gate.outputs.report_job == 'true'",block)
+
+    def test_partial_employer_run_preserves_good_jobs_and_records_blocked_sources(self):
+        audits=[{'source_id':'axis','employer':'Axis','indexed':1,'status':'ok'},
+                {'source_id':'blocked','employer':'Blocked','indexed':0,'status':'blocked'}]
+        output=io.StringIO()
+        with patch.object(employers,'index_sources',return_value=([self.new],audits)), redirect_stdout(output):
+            status=employers.main(['--results-root',str(self.root),'--deduplication-mode','off','--allow-partial-sources'])
+        self.assertEqual(status,0)
+        self.assertEqual([j['job_id'] for j in load_waiting_room_jobs(self.root)],[self.new['job_id']])
+        metadata=json.loads(next((self.root/'waiting_room').rglob('*metadata.json')).read_text())
+        self.assertEqual(metadata['sources'][1]['status'],'blocked')
+        self.assertIn('::warning::',output.getvalue())
+        self.assertIn('blocked',output.getvalue())
+
+    def test_partial_mode_does_not_turn_a_complete_employer_outage_into_success(self):
+        audits=[{'source_id':'axis','indexed':0,'status':'failed'},
+                {'source_id':'blocked','indexed':0,'status':'blocked'}]
+        with patch.object(employers,'index_sources',return_value=([],audits)), redirect_stdout(io.StringIO()):
+            status=employers.main(['--results-root',str(self.root),'--deduplication-mode','off','--allow-partial-sources'])
+        self.assertEqual(status,1)
+
+    def test_default_employer_cli_still_reports_partial_sources_as_failure(self):
+        audits=[{'source_id':'axis','indexed':1,'status':'partial'}]
+        with patch.object(employers,'index_sources',return_value=([self.new],audits)), redirect_stdout(io.StringIO()):
+            status=employers.main(['--results-root',str(self.root),'--deduplication-mode','off'])
+        self.assertEqual(status,1)
+
 
 if __name__=='__main__':
     unittest.main()

@@ -1,6 +1,6 @@
 # Cross-source job deduplication
 
-Employer ads are now compared with recent LinkedIn ads before candidate-profile evaluation. The existing shared result files are the database: no database service or new package dependency is required. The scheduled workflow runs the shared waiting-room check before classification; employer imports also check new ads immediately. Employer scraping itself is still a separate command until it is added to the workflow.
+Employer ads are now compared with recent LinkedIn ads before candidate-profile evaluation. The existing shared result files are the database: no database service or new package dependency is required. The scheduled workflow imports both LinkedIn and company career pages, then runs the shared waiting-room check once before classification on evaluation/report runs. Standalone employer imports also check new ads immediately by default; the workflow disables that import-time check to avoid a second comparison budget on scrape-only runs.
 
 The check works in either arrival order. It keeps the older collected ad and archives a newer copy only after an explicit, valid LLM duplicate verdict. It never decides duplication from employer/title similarity alone. Separate requisitions, different roles and uncertain evidence are retained. The model receives public ad excerpts, not the private candidate profile.
 

@@ -1083,6 +1083,8 @@ def main(argv=None):
     parser.add_argument("--page-size", type=int, default=20)
     parser.add_argument("--request-delay", type=float, default=1)
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument('--allow-partial-sources', action='store_true',
+                        help='Keep source failures visible but succeed if any source completed or returned partial results')
     parser.add_argument('--deduplication-mode', choices=('openai', 'off'), default='openai',
                         help='Check new employer ads against recent LinkedIn ads; uncertain/errors retain the ad')
     parser.add_argument('--deduplication-config', type=Path, default=deduplication.CONFIG_PATH)
@@ -1124,7 +1126,15 @@ def main(argv=None):
     path = write_results(jobs, audits, args.results_root, args.results_bucket, duplicates, dedup_audit)
     log_duplicate_jobs(duplicates)
     print(f"Wrote {path}")
-    return 1 if any(a["status"] != "ok" for a in audits) else 0
+    failed = [audit for audit in audits if audit['status'] != 'ok']
+    if failed:
+        if args.allow_partial_sources and any(audit['status'] in {'ok', 'partial'} for audit in audits):
+            source_ids = ', '.join(audit['source_id'] for audit in failed)
+            print(f"::warning::Employer sources with incomplete coverage: {source_ids}. "
+                  "Successful ads were saved; see source logs and the job source audit.")
+            return 0
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

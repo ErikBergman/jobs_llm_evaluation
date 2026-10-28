@@ -117,7 +117,7 @@ python3 test_all.py
 Scheduling is split across two workflows:
 
 - `.github/workflows/job-search-scheduler.yml` runs hourly and dispatches the execution workflow.
-- `.github/workflows/job-search.yml` performs Koofr sync, scraping, optional evaluation, Telegram notification, and upload.
+- `.github/workflows/job-search.yml` performs Koofr sync, LinkedIn and company career-page scraping, optional cross-source deduplication/profile evaluation, Telegram notification, and upload.
 
 GitHub cron schedules are always interpreted in UTC. The scheduler converts the scheduled UTC time to `Europe/Stockholm` before deciding whether to dispatch an evaluation run. Scraping, Koofr download, and Koofr upload run every scheduled hour; matching and Telegram reporting are gated to scheduled local hours `07` and `19`.
 
@@ -145,7 +145,7 @@ Each matching run writes an audit file next to the discard output:
 results/discard/<timestamp>/linkedin_jobs_sample_match_metadata.json
 ```
 
-The workflow log prints `[source-scrape]` summaries identifying each site that was actually scraped, with new-ad and prefilter counts. Employer imports also report previously seen ads, location/expiry skips, unresolved locations, source errors and truncation, including sources with no new ads. Employer scraping remains a separate command until it is added to the workflow.
+The workflow log prints `[source-scrape]` summaries identifying each site that was actually scraped, with new-ad and prefilter counts. Employer imports also report previously seen ads, location/expiry skips, unresolved locations, source errors and truncation, including sources with no new ads. LinkedIn and employer scraping share the same Koofr result memory and private matching config. Blocked/partial employer sources produce warnings while healthy ads continue into the waiting room; a complete employer outage remains a failure. See [employer_indexing.md](employer_indexing.md) for source coverage and configurable scrape limits.
 
 Each evaluated job has a `[decision]` line with its source (LinkedIn or company name), site, ad URL, job ID, matched/discarded outcome, evaluation stage and reason. `[source-evaluation]` totals split discards into prefilter, triage and confirmation rejections. These counts describe the evaluated batch, which may include ads queued by earlier scrapes. Confirmed cross-source duplicates are reported separately as `[duplicate-discard]` and `[source-duplicates]`.
 

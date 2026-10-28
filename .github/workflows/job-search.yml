@@ -25,6 +25,11 @@ jobs:
       JOB_SEARCH_MAX_PAGES: ${{ vars.JOB_SEARCH_MAX_PAGES || '10' }}
       JOB_SEARCH_PAGE_SIZE: ${{ vars.JOB_SEARCH_PAGE_SIZE || '10' }}
       JOB_SEARCH_REQUEST_DELAY: ${{ vars.JOB_SEARCH_REQUEST_DELAY || '2' }}
+      JOB_EMPLOYER_LIMIT: ${{ vars.JOB_EMPLOYER_LIMIT || '25' }}
+      JOB_EMPLOYER_MAX_PAGES: ${{ vars.JOB_EMPLOYER_MAX_PAGES || '20' }}
+      JOB_EMPLOYER_PAGE_SIZE: ${{ vars.JOB_EMPLOYER_PAGE_SIZE || '20' }}
+      JOB_EMPLOYER_REQUEST_DELAY: ${{ vars.JOB_EMPLOYER_REQUEST_DELAY || '1' }}
+      JOB_EMPLOYER_TIMEOUT: ${{ vars.JOB_EMPLOYER_TIMEOUT || '30' }}
       JOB_LLM_EVALUATION_LIMIT: ${{ vars.JOB_LLM_EVALUATION_LIMIT || '40' }}
       JOB_MATCHER_MODE: ${{ vars.JOB_MATCHER_MODE || 'mock' }}
       JOB_MATCH_LEVEL: ${{ vars.JOB_MATCH_LEVEL || 'good-match' }}
@@ -107,6 +112,7 @@ jobs:
           rclone mkdir "koofr:${KOOFR_PATH}"
 
       - name: Download result memory from Koofr
+        id: memory
         if: steps.schedule_gate.outputs.run_job == 'true'
         env:
           KOOFR_PATH: ${{ secrets.KOOFR_PATH }}
@@ -117,10 +123,11 @@ jobs:
           rclone copy "koofr:${KOOFR_PATH}" "${RUNTIME_RESULTS_DIR}" --create-empty-src-dirs
 
       - name: Run tests
+        id: tests
         if: steps.schedule_gate.outputs.run_job == 'true'
         run: |
           python3 -m unittest
-          python3 -m py_compile linkedin_guest_jobs.py match_jobs.py telegram_notify.py
+          python3 -m py_compile linkedin_guest_jobs.py employer_jobs.py deduplicate_jobs.py match_jobs.py telegram_notify.py job_source_audit.py
 
       - name: Generating search url
         if: steps.schedule_gate.outputs.run_job == 'true'
@@ -185,8 +192,31 @@ jobs:
           echo "new_jobs=true" >> "$GITHUB_OUTPUT"
           echo "scrape_path=${scrape_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Scrape company career pages
+        id: employer_scrape
+        if: ${{ !cancelled() && steps.schedule_gate.outputs.run_job == 'true' && steps.memory.outcome == 'success' && steps.tests.outcome == 'success' }}
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          matching_config_args=()
+          if [[ -f "${RUNTIME_RESULTS_DIR}/job_matching.json" ]]; then
+            matching_config_args+=(--matching-config "${RUNTIME_RESULTS_DIR}/job_matching.json")
+          fi
+          python3 -u employer_jobs.py \
+            --results-root "$RUNTIME_RESULTS_DIR" \
+            --results-bucket waiting_room \
+            --limit "$JOB_EMPLOYER_LIMIT" \
+            --max-pages "$JOB_EMPLOYER_MAX_PAGES" \
+            --page-size "$JOB_EMPLOYER_PAGE_SIZE" \
+            --request-delay "$JOB_EMPLOYER_REQUEST_DELAY" \
+            --timeout "$JOB_EMPLOYER_TIMEOUT" \
+            --allow-partial-sources \
+            --deduplication-mode off \
+            "${matching_config_args[@]}" 2>&1 | tee employer_scrape.log
+
       - name: Deduplicate cross-source waiting-room jobs
-        if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
+        id: deduplicate
+        if: ${{ !cancelled() && steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true' && steps.memory.outcome == 'success' && steps.tests.outcome == 'success' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           JOB_DEDUPLICATION_MODE: ${{ vars.JOB_DEDUPLICATION_MODE || 'openai' }}
@@ -199,7 +229,7 @@ jobs:
             --model "$JOB_DEDUPLICATION_MODEL" 2>&1 | tee deduplicate.log
 
       - name: Classify waiting-room jobs
-        if: steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true'
+        if: ${{ !cancelled() && steps.schedule_gate.outputs.run_job == 'true' && steps.schedule_gate.outputs.report_job == 'true' && steps.deduplicate.outcome == 'success' }}
         id: classify
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}

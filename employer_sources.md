@@ -2,7 +2,7 @@
 
 `job_listing_pages_lund.json` contains 48 employer career sources: the 27 supplied on 2026-10-09 and 21 researched additions reviewed on 2026-10-15 (Europe/Stockholm).
 
-This is a research catalogue for adding employer sources. Employer indexing for all 48 sources is now configured in `employer_jobs.py` (45 operational or monitored, three explicitly blocked); see [employer_indexing.md](employer_indexing.md) for strategies, live results and use alongside LinkedIn. The scheduled workflow still runs LinkedIn only. The catalogue entries describe career sources, not individual job ads or confirmed job matches.
+This is a research catalogue for adding employer sources. Employer indexing for all 48 sources is now configured in `employer_jobs.py` (45 operational or monitored, three explicitly blocked); see [employer_indexing.md](employer_indexing.md) for strategies, live results and use alongside LinkedIn. The scheduled workflow imports both LinkedIn and company career pages into the shared waiting room. The catalogue entries describe career sources, not individual job ads or confirmed job matches.
 
 ## Selection and location
 

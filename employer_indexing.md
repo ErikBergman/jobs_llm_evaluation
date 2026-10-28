@@ -63,7 +63,9 @@ python3 match_jobs.py --waiting-room --output-root runtime_results --matcher moc
 
 The last command demonstrates compatibility using the free mock matcher. The preceding duplicate stage can make bounded small-model calls when recent candidates exist; use `--mode off` there and `--deduplication-mode off` on employer imports for entirely offline/mock operation. Use the existing OpenAI matcher configuration for actual candidate-profile evaluation. Source failures return nonzero without discarding successful ads, so orchestration should retain the source failure and still allow healthy waiting-room inputs to be processed.
 
-The scheduled workflow now runs cross-source deduplication before waiting-room classification. Employer scraping still requires adding the employer command after LinkedIn scraping, with the same results root and matching configuration. The all-source command currently returns nonzero for the three documented blocks and Schneider's unresolved locations; the diagnostics explain why.
+The scheduled workflow imports company career pages after LinkedIn on every scrape run, using the same Koofr-backed results root and matching configuration. Import-time duplicate checking is disabled there; the shared cross-source stage runs once before profile classification on evaluation/report runs. The `--allow-partial-sources` workflow option preserves healthy ads and emits a warning for blocked or partial sources. An outage affecting every employer source still fails the employer step. Both importers can contribute healthy ads even when the other fails; failures remain visible, and collected ads are synced back to Koofr.
+
+Workflow limits can be overridden with repository variables `JOB_EMPLOYER_LIMIT` (25 new Lund ads per source), `JOB_EMPLOYER_MAX_PAGES` (20), `JOB_EMPLOYER_PAGE_SIZE` (20), `JOB_EMPLOYER_REQUEST_DELAY` (1 second), and `JOB_EMPLOYER_TIMEOUT` (30 seconds per request). Company scraping has a 30-minute step timeout. The ordinary CLI remains strict about partial sources unless `--allow-partial-sources` is explicitly supplied.
 
 Select individual sources with repeated flags:
 
