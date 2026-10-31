@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from job_source_audit import job_source_label
+from match_jobs import load_waiting_room_jobs
 
 
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
@@ -57,19 +58,31 @@ def load_metadata_files(results_root: Path) -> list[dict[str, Any]]:
 
 
 def considered_since(metadata: list[dict[str, Any]], now: datetime, hours: int = 12) -> int:
-    cutoff = now.astimezone(timezone.utc) - timedelta(hours=hours)
-    total = 0
+    now = now.astimezone(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+    evaluated_ids: set[str] = set()
+    legacy_batches: dict[tuple[str, str], int] = {}
     for item in metadata:
         matched_at = item.get("matched_at")
         if not isinstance(matched_at, str):
             continue
         parsed = parse_utc_timestamp(matched_at)
-        if parsed is None or parsed < cutoff:
+        if parsed is None or not cutoff <= parsed <= now:
+            continue
+        decisions = item.get('decisions')
+        if isinstance(decisions, list):
+            completed = [d for d in decisions if isinstance(d, dict) and isinstance(d.get('hit'), bool)]
+            evaluated_ids.update(str(d['job_id']) for d in completed if d.get('job_id') not in (None, ''))
+            anonymous = sum(d.get('job_id') in (None, '') for d in completed)
+            if anonymous:
+                key = (str(item.get('input_path') or item.get('_metadata_path') or ''), matched_at)
+                legacy_batches[key] = max(legacy_batches.get(key, 0), anonymous)
             continue
         job_count = item.get("job_count", 0)
         if isinstance(job_count, int):
-            total += job_count
-    return total
+            key = (str(item.get('input_path') or item.get('_metadata_path') or ''), matched_at)
+            legacy_batches[key] = max(legacy_batches.get(key, 0), job_count)
+    return len(evaluated_ids) + sum(legacy_batches.values())
 
 
 def collect_job_ids(payload: Any) -> set[str]:
@@ -173,13 +186,21 @@ def build_message(
     accumulated_jobs: int,
     hits: list[dict[str, str]],
     hours: int = 12,
+    evaluated_this_run: int | None = None,
+    llm_reviewed_this_run: int | None = None,
+    pending_evaluation: int | None = None,
 ) -> str:
     lines = ["✅ New match!", ""] if hits else []
     lines.extend([
         "Job search summary",
-        f"Considered in last {hours} hours: {considered_last_hours}",
+        f"Evaluated in last {hours} hours: {considered_last_hours}",
         f"Ads in memory: {accumulated_jobs}",
     ])
+    if evaluated_this_run is not None:
+        detail = f" ({llm_reviewed_this_run} sent to AI)" if llm_reviewed_this_run is not None else ''
+        lines.append(f"Evaluated this run: {evaluated_this_run}{detail}")
+    if pending_evaluation is not None:
+        lines.append(f"Waiting for evaluation: {pending_evaluation}")
     if hits:
         lines.extend([f"New matches in this run: {len(hits)}", ""])
         counts = Counter(hit.get("source_name") or job_source_label(hit) for hit in hits)
@@ -221,11 +242,17 @@ def send_telegram_message(token: str, chat_id: str, text: str) -> None:
 def summary_message(results_root: Path, current_input: str | None, hours: int, now: datetime) -> str:
     metadata = load_metadata_files(results_root)
     latest_metadata = current_metadata(metadata, current_input=current_input) if current_input else None
+    current_decisions = latest_metadata.get('decisions', []) if latest_metadata else []
+    llm_count = sum(d.get('stage') != 'prefilter' and d.get('matcher', latest_metadata.get('matcher')) == 'openai'
+                    for d in current_decisions if isinstance(d, dict)) if latest_metadata else 0
     return build_message(
         considered_last_hours=considered_since(metadata, now=now, hours=hours),
         accumulated_jobs=accumulated_job_count(results_root),
         hits=current_hits(latest_metadata),
         hours=hours,
+        evaluated_this_run=latest_metadata.get('job_count', 0) if latest_metadata else 0,
+        llm_reviewed_this_run=llm_count,
+        pending_evaluation=len(load_waiting_room_jobs(results_root, exclude_evaluated=True)),
     )
 
 

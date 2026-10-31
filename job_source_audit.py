@@ -91,7 +91,7 @@ def write_actions_summary(log_paths: list[Path], summary_path: Path) -> None:
             missing_logs.append(path.name)
             continue
         for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
-            if line.startswith(('[source-scrape]', '[source-evaluation]', '[source-duplicates]')):
+            if line.startswith(('[source-scrape]', '[source-evaluation]', '[source-duplicates]', '[evaluation-memory]', '[evaluation-queue]')):
                 summary_rows.append(line)
             elif line.startswith(('[decision]', '[duplicate-discard]', '[source-error]')):
                 decisions.append(line)

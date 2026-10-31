@@ -414,6 +414,7 @@ def deduplicate_jobs(jobs, history, config, decider, cache, now=None):
             decision.update(decision='not_compared', reason='No plausible recent cross-source candidate.')
         else:
             key = cache.key(job, candidates)
+            decision['comparison_fingerprint'] = key
             result = cache.get(key, candidates)
             if result is not None:
                 audit['cache_hits'] += 1
@@ -426,6 +427,8 @@ def deduplicate_jobs(jobs, history, config, decider, cache, now=None):
                 decision.update(decision='not_compared', reason='Comparison call budget exhausted; ad retained.')
             else:
                 audit['llm_calls'] += 1
+                print(f"[dedup-request] record_id={str(job['job_id'])!r} comparison_fingerprint={key} "
+                      f"candidate_ids={[r.record_id for r in candidates]!r}", flush=True)
                 try:
                     response = decider(job, candidates)
                     result = validate_decision(response, candidates)

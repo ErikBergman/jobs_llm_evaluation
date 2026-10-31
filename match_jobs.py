@@ -1436,7 +1436,30 @@ def waiting_room_root(output_root: Path) -> Path:
     return output_root / WAITING_ROOM_BUCKET
 
 
-def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
+def evaluated_job_ids(output_root: Path) -> set[str]:
+    """Read completed results only; raw discard inputs are not evaluations."""
+    evaluated: set[str] = set()
+    for bucket in ('hits', 'discard'):
+        for path in sorted((output_root / bucket).rglob('*.json')):
+            if not path.name.endswith(('_hits.json', '_discard.json', '_match_metadata.json')):
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                print(f"Skipping unreadable evaluation history: {path}", file=sys.stderr)
+                continue
+            if path.name.endswith('_match_metadata.json'):
+                records = payload.get('decisions', []) if isinstance(payload, dict) else []
+                records = [d for d in records if isinstance(d, dict) and isinstance(d.get('hit'), bool)] if isinstance(records, list) else []
+            else:
+                records = payload if isinstance(payload, list) else []
+            for record in records:
+                if isinstance(record, dict) and record.get('job_id') not in (None, ''):
+                    evaluated.add(str(record['job_id']))
+    return evaluated
+
+
+def load_waiting_room_jobs(output_root: Path, *, exclude_evaluated: bool = False) -> list[dict[str, Any]]:
     root = waiting_room_root(output_root)
     if not root.exists():
         return []
@@ -1461,6 +1484,9 @@ def load_waiting_room_jobs(output_root: Path) -> list[dict[str, Any]]:
                 jobs_by_id[dedupe_key]["source_searches"] = merged_sources
                 continue
             jobs_by_id[dedupe_key] = dict(job)
+    if exclude_evaluated:
+        evaluated = evaluated_job_ids(output_root)
+        return [job for key, job in jobs_by_id.items() if key not in evaluated]
     return list(jobs_by_id.values())
 
 
@@ -1589,7 +1615,11 @@ def main() -> int:
         deferred_waiting_room_jobs: list[dict[str, Any]] = []
         if args.waiting_room:
             resolved_timestamp = args.timestamp or current_timestamp()
-            waiting_room_jobs = load_waiting_room_jobs(args.output_root)
+            loaded_jobs = load_waiting_room_jobs(args.output_root)
+            evaluated = evaluated_job_ids(args.output_root)
+            waiting_room_jobs = [job for job in loaded_jobs if str(job.get('job_id')) not in evaluated]
+            print(f"[evaluation-memory] queued={len(loaded_jobs)} "
+                  f"already_evaluated={len(loaded_jobs) - len(waiting_room_jobs)} pending={len(waiting_room_jobs)}")
             effective_llm_limit = args.llm_limit if args.matcher == "openai" else None
             selected_waiting_room_jobs, deferred_waiting_room_jobs = split_waiting_room_jobs_for_llm_limit(
                 waiting_room_jobs,
@@ -1627,6 +1657,13 @@ def main() -> int:
             model=args.openai_model if args.matcher == "openai" else None,
             match_level=match_level if args.matcher == "openai" else None,
         )
+        if args.waiting_room:
+            metadata['waiting_room_before'] = len(waiting_room_jobs)
+            metadata['deferred_job_count'] = len(deferred_waiting_room_jobs)
+            metadata['llm_limit'] = effective_llm_limit
+            write_object_json(metadata_path, metadata)
+            print(f"[evaluation-queue] evaluated={metadata['job_count']} "
+                  f"deferred={len(deferred_waiting_room_jobs)} llm_limit={effective_llm_limit}")
         jobs = load_jobs(input_path)
         print(format_source_evaluation_summary(jobs, metadata["decisions"]))
         if args.matcher == "openai":

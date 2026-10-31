@@ -72,6 +72,8 @@ The profile file may be plain text or RTF. Local profile files named `job_profil
 
 Waiting-room evaluation can cap OpenAI spend with `--llm-limit N`. Prefilter-passing jobs above that cap are requeued in `results/waiting_room/<timestamp>/deferred_jobs.json` for a later evaluation instead of being discarded.
 
+The default cap is 40 LLM-eligible ads per scheduled evaluation. A large company-import backlog can therefore produce several consecutive 40-ad batches, including on weekends. Automatic waiting-room processing skips IDs already present in completed match outputs or recorded decisions, before either duplicate checking or profile evaluation. Explicit `--input` evaluation remains available for an intentional reassessment.
+
 GitHub Actions usage:
 
 - add repository secret `OPENAI_API_KEY`
@@ -92,6 +94,8 @@ When cheat mode is enabled, classification must use `JOB_MATCHER_MODE=openai`. T
 ## Telegram summaries
 
 Each workflow run that passes the schedule gate sends a Telegram message with the number of ads considered in the last 12 hours, the number of unique job ads in result memory, and any new matches from the current run. Messages with matches start with `✅ New match!` and break down the new matches by source, such as `From LinkedIn` or `From Axis` for a direct company-page import. When there are no matches, the message says `0 new matches found this run`. For each match, the message includes the scraped ad URL and the OpenAI decision reason.
+
+The summary distinguishes ads evaluated in the rolling 12-hour window, the current batch (including how many were sent to AI), and the remaining waiting-room backlog. Evaluated counts use distinct recorded job IDs where available, so copied metadata does not double-count an ad. The rolling total is processing activity, not the number of newly posted ads; delayed GitHub schedules can place two report runs inside one 12-hour window. New `[evaluation-memory]` and `[evaluation-queue]` log lines expose skipped completed ads, the cap, and deferrals in the Actions source audit.
 
 ## Offline corpus tests
 

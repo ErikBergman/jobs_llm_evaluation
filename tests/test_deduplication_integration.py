@@ -197,6 +197,20 @@ class IntegrationTests(unittest.TestCase):
             status=employers.main(['--results-root',str(self.root),'--deduplication-mode','off'])
         self.assertEqual(status,1)
 
+    def test_already_evaluated_queue_copy_is_removed_before_any_paid_duplicate_check(self):
+        old_path=self.save('hits/20261015_100000/jobs_hits.json',[self.older])
+        original=old_path.read_bytes()
+        self.save('discard/20261015_100000/jobs_match_metadata.json',
+                  {'decisions':[{'job_id':self.new['job_id'],'hit':False}]})
+        self.save('waiting_room/20261016_100000/jobs.json',[self.new,job('fresh')])
+        def forbidden(*args):
+            self.fail('An already evaluated ad must not trigger another duplicate-model call')
+        audit=cli.process_waiting_room(self.root,self.config,forbidden,NOW)
+        self.assertEqual(audit['already_evaluated'],1)
+        self.assertEqual(audit['llm_calls'],0)
+        self.assertEqual([j['job_id'] for j in load_waiting_room_jobs(self.root)],['fresh'])
+        self.assertEqual(old_path.read_bytes(),original)
+
 
 if __name__=='__main__':
     unittest.main()

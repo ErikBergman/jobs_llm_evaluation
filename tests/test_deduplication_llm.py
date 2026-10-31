@@ -109,7 +109,7 @@ class LLMTests(unittest.TestCase):
         self.assertEqual(audit['error_kept'], 2)
 
     def test_cached_negative_comparison_survives_restart_without_tokens(self):
-        self.run_dedup(response('different', None))
+        _, _, first_audit, _ = self.run_dedup(response('different', None))
         self.cache.save()
         cache = d.DecisionCache(self.cache.path, self.config, NOW)
         def forbidden(*args):
@@ -119,6 +119,8 @@ class LLMTests(unittest.TestCase):
         self.assertEqual(audit['llm_calls'], 0)
         self.assertEqual(audit['input_tokens'], 0)
         self.assertEqual(len(kept), 1)
+        self.assertEqual(audit['decisions'][0]['comparison_fingerprint'],
+                         first_audit['decisions'][0]['comparison_fingerprint'])
 
     def test_malformed_cached_decision_fails_open(self):
         key=self.cache.key(self.new,[self.older])

@@ -133,7 +133,9 @@ class TelegramNotifyTests(unittest.TestCase):
                 now=datetime(2026, 4, 25, 18, 0, tzinfo=timezone.utc),
             )
 
-        self.assertIn("Considered in last 12 hours: 1", message)
+        self.assertIn("Evaluated in last 12 hours: 1", message)
+        self.assertIn("Evaluated this run: 1 (0 sent to AI)", message)
+        self.assertIn("Waiting for evaluation: 0", message)
         self.assertTrue(message.startswith("✅ New match!\n"))
         self.assertNotIn("Searching for", message)
         self.assertIn("Ads in memory: 1", message)
@@ -188,7 +190,7 @@ class TelegramNotifyTests(unittest.TestCase):
 
         self.assertNotIn("Searching for", message)
         self.assertNotIn("✅ New match!", message)
-        self.assertIn("Considered in last 12 hours: 0", message)
+        self.assertIn("Evaluated in last 12 hours: 0", message)
         self.assertIn("Ads in memory: 4", message)
         self.assertIn("0 new matches found this run", message)
         self.assertNotIn("New matches in this run:", message)
@@ -246,6 +248,41 @@ class TelegramNotifyTests(unittest.TestCase):
             (run_dir / "bad_match_metadata.json").write_text("{", encoding="utf-8")
 
             self.assertEqual(len(load_metadata_files(root)), 1)
+
+    def test_considered_since_deduplicates_recorded_decisions_and_excludes_future_runs(self):
+        metadata = [
+            {'matched_at': '2026-04-25T16:00:00Z', 'job_count': 2,
+             'decisions': [{'job_id': '1', 'hit': False}, {'job_id': '2', 'hit': True}]},
+            {'matched_at': '2026-04-25T17:00:00Z', 'job_count': 2,
+             'decisions': [{'job_id': '2', 'hit': True}, {'job_id': '3', 'hit': False}]},
+            {'matched_at': '2026-04-25T19:00:00Z', 'job_count': 1,
+             'decisions': [{'job_id': 'future', 'hit': True}]},
+        ]
+        self.assertEqual(considered_since(metadata, datetime(2026, 4, 25, 18, tzinfo=timezone.utc)), 3)
+
+    def test_summary_distinguishes_local_filtering_ai_review_and_pending_backlog(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run = root / 'discard' / 'run'
+            run.mkdir(parents=True)
+            input_path = run / 'jobs.json'
+            input_path.write_text(json.dumps([{'job_id': 'done-1'}, {'job_id': 'done-2'}]))
+            metadata = {'matched_at': '2026-04-25T17:00:00Z', 'input_path': str(input_path),
+                        'job_count': 2, 'matcher': 'openai', 'decisions': [
+                            {'job_id': 'done-1', 'hit': False, 'stage': 'prefilter', 'matcher': 'prefilter'},
+                            {'job_id': 'done-2', 'hit': False, 'stage': 'triage', 'matcher': 'openai'}]}
+            (run / 'jobs_match_metadata.json').write_text(json.dumps(metadata))
+            queue = root / 'waiting_room' / 'run'
+            queue.mkdir(parents=True)
+            (queue / 'jobs.json').write_text(json.dumps([{'job_id': 'done-2'}, {'job_id': 'pending'}]))
+            message = summary_message(root, str(input_path), 12, datetime(2026, 4, 25, 18, tzinfo=timezone.utc))
+        self.assertIn('Evaluated this run: 2 (1 sent to AI)', message)
+        self.assertIn('Waiting for evaluation: 1', message)
+
+    def test_anonymous_completed_decisions_remain_counted_without_counting_copied_metadata_twice(self):
+        batch = {'matched_at': '2026-04-25T17:00:00Z', 'input_path': 'batch.json',
+                 'decisions': [{'job_id': None, 'hit': False}]}
+        self.assertEqual(considered_since([batch, dict(batch)], datetime(2026, 4, 25, 18, tzinfo=timezone.utc)), 1)
 
 
 if __name__ == "__main__":

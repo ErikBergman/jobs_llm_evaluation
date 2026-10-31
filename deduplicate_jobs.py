@@ -10,13 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import job_deduplication as dedup
-from match_jobs import is_unclassified_jobs_json, load_waiting_room_jobs
+from match_jobs import evaluated_job_ids, is_unclassified_jobs_json, load_waiting_room_jobs
 from job_source_audit import log_duplicate_jobs
 
 
 def process_waiting_room(results_root, config, decider=None, now=None, dry_run=False):
     now = now or datetime.now(timezone.utc)
     jobs = load_waiting_room_jobs(results_root)
+    evaluated = evaluated_job_ids(Path(results_root))
+    already_evaluated = {str(j['job_id']) for j in jobs if j.get('job_id') and str(j['job_id']) in evaluated}
+    jobs = [job for job in jobs if str(job.get('job_id')) not in already_evaluated]
     if dry_run:
         history, issues = dedup.load_history(results_root, now)
         ids = {str(j['job_id']) for j in jobs if j.get('job_id')}
@@ -31,10 +34,11 @@ def process_waiting_room(results_root, config, decider=None, now=None, dry_run=F
                 candidates += 1
             if job.get('job_id'):
                 index.add(dedup.SavedJob(job, stamp))
-        return {'mode': 'dry-run', 'new_ads': len(jobs), 'ads_with_candidates': candidates,
+        return {'mode': 'dry-run', 'new_ads': len(jobs), 'already_evaluated': len(already_evaluated), 'ads_with_candidates': candidates,
                 'maximum_calls': min(candidates, config.max_calls), 'llm_calls': 0,
                 'duplicates': 0, 'history_issues': issues}
     accepted, duplicates, audit = dedup.filter_new_jobs(jobs, results_root, config, decider, now)
+    audit['already_evaluated'] = len(already_evaluated)
     stamp = now.strftime('%Y%m%d_%H%M%S_%f')
     # Archive full discarded records before removing any waiting-room copy. Their IDs stay in seen memory.
     archive = dedup.write_duplicate_archive(duplicates, results_root, stamp)
@@ -53,7 +57,7 @@ def process_waiting_room(results_root, config, decider=None, now=None, dry_run=F
         if not isinstance(payload, list) or not all(isinstance(j, dict) for j in payload):
             continue
         revised = [accepted_by_id.get(str(j.get('job_id')), j) for j in payload
-                   if str(j.get('job_id')) not in retired]
+                   if str(j.get('job_id')) not in retired | already_evaluated]
         if revised != payload:
             rewrites.append((path, revised))
     for path, revised in rewrites:

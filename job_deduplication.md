@@ -37,6 +37,8 @@ Historical ads without a trustworthy collection date, or with a future collectio
 
 No recent employer candidate means no API call. All shortlisted older ads are compared in one request rather than one call per pair. Cached positive, negative and uncertain decisions make no new calls; model, prompt and compared excerpt changes invalidate the cache. Cache entries expire after the lookback window plus a day and are capped at 10,000 entries.
 
+Automatic shared-queue processing removes IDs already present in completed match results before considering any further LLM request. Each attempted duplicate-model call logs a `[dedup-request]` record ID, candidate IDs, and comparison fingerprint. The same fingerprint is saved in the per-ad audit for both fresh and cached decisions, allowing repeated identical requests to be distinguished from changed prompts without logging ad bodies or secrets.
+
 With defaults, one comparison carries at most four 1,600-character ad excerpts plus bounded metadata and instructions. Actual billed input/output token counts are saved from API responses, including incomplete responses. The output ceiling is 10,240 tokens for 20 calls; input tokens depend on the text and API schema. This is a bounded workload, not a fixed monetary quote. `max_calls: 0` uses only cached decisions; `--mode off` disables the stage entirely.
 
 The model uses [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) with a strict JSON schema, no tools and `store: false`. There are no live API calls in the test suite; provider-specific duplicate judgement accuracy still needs observation on real paired ads.
