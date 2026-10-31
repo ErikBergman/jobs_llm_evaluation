@@ -97,6 +97,8 @@ Each workflow run that passes the schedule gate sends a Telegram message with th
 
 The summary distinguishes ads evaluated in the rolling 12-hour window, the current batch (including how many were sent to AI), and the remaining waiting-room backlog. Evaluated counts use distinct recorded job IDs where available, so copied metadata does not double-count an ad. The rolling total is processing activity, not the number of newly posted ads; delayed GitHub schedules can place two report runs inside one 12-hour window. New `[evaluation-memory]` and `[evaluation-queue]` log lines expose skipped completed ads, the cap, and deferrals in the Actions source audit.
 
+`New ads since previous report` counts distinct ad IDs newly added to saved memory across both sources, including filtered-out and duplicate-archived ads. It does not count queued older ads as new or use posting dates. After a successful Telegram send, `notifications/telegram_report_state.json` stores the cumulative known IDs and report time; the normal Koofr upload preserves this checkpoint. Dry runs and failed sends leave it unchanged. Summary sending and memory uploads require a successful memory download, so an incomplete local copy cannot replace the stored baseline or queue. On the first deployment, the previous matching report and earliest saved collection times supply the baseline. If historical collection times are incomplete, the first report says the count is unavailable and establishes an exact ID checkpoint for subsequent reports. A genuinely first report without earlier matching history uses the labelled 12-hour initial window.
+
 ## Offline corpus tests
 
 The test suite includes a small anonymized offline corpus under `tests/fixtures/job_corpus/`.

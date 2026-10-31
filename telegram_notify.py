@@ -8,6 +8,7 @@ import json
 import os
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -16,9 +17,20 @@ from urllib.request import Request, urlopen
 
 from job_source_audit import job_source_label
 from match_jobs import load_waiting_room_jobs
+from job_deduplication import atomic_json, collection_time
 
 
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+REPORT_STATE_PATH = Path('notifications/telegram_report_state.json')
+
+
+@dataclass(frozen=True)
+class DiscoverySummary:
+    known_job_ids: frozenset[str]
+    memory_count: int
+    new_ads: int | None
+    since: datetime
+    first_report: bool = False
 
 
 def load_json(path: Path) -> Any:
@@ -99,16 +111,86 @@ def collect_job_ids(payload: Any) -> set[str]:
     return job_ids
 
 
-def accumulated_job_count(results_root: Path) -> int:
+def memory_job_ids(results_root: Path) -> set[str]:
     job_ids: set[str] = set()
     if not results_root.exists():
-        return 0
+        return job_ids
     for path in results_root.rglob("*.json"):
         try:
             job_ids.update(collect_job_ids(load_json(path)))
         except (OSError, json.JSONDecodeError):
             continue
-    return len(job_ids)
+    return job_ids
+
+
+def accumulated_job_count(results_root: Path) -> int:
+    return len(memory_job_ids(results_root))
+
+
+def discovery_since_previous_report(
+    results_root: Path, metadata: list[dict[str, Any]], current_input: str | None,
+    now: datetime, hours: int = 12,
+) -> DiscoverySummary:
+    now = now.astimezone(timezone.utc)
+    current_ids = memory_job_ids(results_root)
+    state_path = results_root / REPORT_STATE_PATH
+    if state_path.exists():
+        try:
+            state = load_json(state_path)
+            sent_at = parse_utc_timestamp(state['sent_at']) if isinstance(state['sent_at'], str) else None
+            known = state['known_job_ids']
+            if (state.get('version') != 1 or sent_at is None or sent_at > now
+                    or not isinstance(known, list) or any(not isinstance(x, str) or not x for x in known)):
+                raise ValueError('Invalid report checkpoint')
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError('Invalid Telegram report checkpoint; existing state left untouched.') from error
+        previous_ids = set(known)
+        return DiscoverySummary(frozenset(previous_ids | current_ids), len(current_ids),
+                                len(current_ids - previous_ids), sent_at)
+
+    # First deployment: previous matching reports and saved collection times
+    # provide a baseline. Never label all historical/backlogged ads as new.
+    prior_reports = []
+    for item in metadata:
+        if current_input and str(Path(str(item.get('input_path') or ''))) == str(Path(current_input)):
+            continue
+        value = item.get('matched_at')
+        stamp = parse_utc_timestamp(value) if isinstance(value, str) else None
+        if stamp is not None and stamp <= now:
+            prior_reports.append(stamp)
+    since = max(prior_reports) if prior_reports else now - timedelta(hours=hours)
+    first_seen: dict[str, datetime] = {}
+    for bucket in ('waiting_room', 'discard', 'hits', 'duplicates'):
+        for path in (results_root / bucket).rglob('*.json'):
+            try:
+                records = load_json(path)
+            except (OSError, ValueError):
+                continue
+            if not isinstance(records, list):
+                continue
+            for job in records:
+                if not isinstance(job, dict) or job.get('job_id') in (None, ''):
+                    continue
+                job_id = str(job['job_id'])
+                candidates = [collection_time({key: job.get(key)}) for key in
+                              ('first_seen_at', 'indexed_at', 'collected_at', 'scraped_at', 'fetched_at')]
+                candidates.append(collection_time({}, path))
+                valid = [stamp for stamp in candidates if stamp is not None and stamp <= now]
+                if valid:
+                    stamp = min(valid)
+                    first_seen[job_id] = min(first_seen.get(job_id, stamp), stamp)
+    new_count = sum(since < stamp <= now for stamp in first_seen.values()) if current_ids <= first_seen.keys() else None
+    return DiscoverySummary(frozenset(current_ids), len(current_ids), new_count, since, not prior_reports)
+
+
+def save_report_checkpoint(results_root: Path, discovery: DiscoverySummary, sent_at: datetime) -> None:
+    atomic_json(results_root / REPORT_STATE_PATH, {
+        'version': 1,
+        'sent_at': sent_at.astimezone(timezone.utc).isoformat(),
+        'known_job_ids': sorted(discovery.known_job_ids),
+        'new_ads': discovery.new_ads,
+        'previous_report_at': discovery.since.isoformat(),
+    })
 
 
 def current_metadata(metadata: list[dict[str, Any]], current_input: str | None = None) -> dict[str, Any] | None:
@@ -189,10 +271,14 @@ def build_message(
     evaluated_this_run: int | None = None,
     llm_reviewed_this_run: int | None = None,
     pending_evaluation: int | None = None,
+    new_ads_since_previous_report: int | None = None,
+    first_report: bool = False,
 ) -> str:
     lines = ["✅ New match!", ""] if hits else []
     lines.extend([
         "Job search summary",
+        (f"New ads in last {hours} hours (first report): " if first_report else "New ads since previous report: ")
+        + (str(new_ads_since_previous_report) if new_ads_since_previous_report is not None else 'unavailable (establishing baseline)'),
         f"Evaluated in last {hours} hours: {considered_last_hours}",
         f"Ads in memory: {accumulated_jobs}",
     ])
@@ -239,20 +325,24 @@ def send_telegram_message(token: str, chat_id: str, text: str) -> None:
         raise ValueError(f"Telegram API request failed: {error}") from error
 
 
-def summary_message(results_root: Path, current_input: str | None, hours: int, now: datetime) -> str:
+def summary_message(results_root: Path, current_input: str | None, hours: int, now: datetime,
+                    discovery: DiscoverySummary | None = None) -> str:
     metadata = load_metadata_files(results_root)
+    discovery = discovery or discovery_since_previous_report(results_root, metadata, current_input, now, hours)
     latest_metadata = current_metadata(metadata, current_input=current_input) if current_input else None
     current_decisions = latest_metadata.get('decisions', []) if latest_metadata else []
     llm_count = sum(d.get('stage') != 'prefilter' and d.get('matcher', latest_metadata.get('matcher')) == 'openai'
                     for d in current_decisions if isinstance(d, dict)) if latest_metadata else 0
     return build_message(
         considered_last_hours=considered_since(metadata, now=now, hours=hours),
-        accumulated_jobs=accumulated_job_count(results_root),
+        accumulated_jobs=discovery.memory_count,
         hits=current_hits(latest_metadata),
         hours=hours,
         evaluated_this_run=latest_metadata.get('job_count', 0) if latest_metadata else 0,
         llm_reviewed_this_run=llm_count,
         pending_evaluation=len(load_waiting_room_jobs(results_root, exclude_evaluated=True)),
+        new_ads_since_previous_report=discovery.new_ads,
+        first_report=discovery.first_report,
     )
 
 
@@ -265,11 +355,15 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        now = datetime.now(timezone.utc)
+        discovery = discovery_since_previous_report(
+            args.results_root, load_metadata_files(args.results_root), args.current_input, now, args.hours)
         message = summary_message(
             args.results_root,
             current_input=args.current_input,
             hours=args.hours,
-            now=datetime.now(timezone.utc),
+            now=now,
+            discovery=discovery,
         )
         print(message)
         if not args.dry_run:
@@ -278,6 +372,7 @@ def main() -> int:
                 os.environ.get("TELEGRAM_CHAT_ID", ""),
                 message,
             )
+            save_report_checkpoint(args.results_root, discovery, datetime.now(timezone.utc))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

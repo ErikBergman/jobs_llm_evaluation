@@ -280,7 +280,7 @@ jobs:
         run: python3 job_source_audit.py --logs scrape.log employer_scrape.log deduplicate.log classify.log
 
       - name: Send Telegram summary
-        if: always() && steps.schedule_gate.outputs.report_job == 'true'
+        if: always() && steps.schedule_gate.outputs.report_job == 'true' && steps.memory.outcome == 'success'
         env:
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}
           CLASSIFIED_INPUT: ${{ steps.classify.outputs.classified_input }}
@@ -296,7 +296,7 @@ jobs:
           python3 telegram_notify.py "${args[@]}"
 
       - name: Upload result memory to Koofr
-        if: always() && steps.schedule_gate.outputs.run_job == 'true'
+        if: always() && steps.schedule_gate.outputs.run_job == 'true' && steps.memory.outcome == 'success'
         env:
           KOOFR_PATH: ${{ secrets.KOOFR_PATH }}
           RUNTIME_RESULTS_DIR: ${{ env.RUNTIME_RESULTS_DIR }}

@@ -12,7 +12,7 @@ import sys
 import time
 import unicodedata
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -1641,7 +1641,8 @@ def main() -> int:
         print("No new public job cards found.", file=sys.stderr)
         return 1
 
-    payload = [asdict(job) for job in jobs]
+    collected_at = datetime.now(timezone.utc).isoformat()
+    payload = [dict(asdict(job), collected_at=collected_at) for job in jobs]
     output_path = timestamped_output_path(args.output, results_root=args.results_root, results_bucket=args.results_bucket)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as output_file:
